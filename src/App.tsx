@@ -3,10 +3,19 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import "./App.css";
-import type { FileEntry, SortKey, SortDirection } from "./types";
+import type {
+  FileEntry,
+  SortKey,
+  SortDirection,
+  SpecialDir,
+  DriveInfo,
+} from "./types";
 import { formatSize, formatDate } from "./lib/format";
 import { getTypeInfo } from "./lib/fileType";
 import { typeLabel } from "./lib/category";
+import { parentPath } from "./lib/path";
+import Sidebar from "./components/Sidebar";
+import Breadcrumb from "./components/Breadcrumb";
 
 const SORT_LABELS: Record<SortKey, string> = {
   name: "Nom",
@@ -15,10 +24,13 @@ const SORT_LABELS: Record<SortKey, string> = {
   modified: "Date",
 };
 
+const LAST_PATH_KEY = "noya:lastPath";
+
 function App() {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [history, setHistory] = useState<string[]>([]);
+  const [forwardHistory, setForwardHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +41,29 @@ function App() {
   const [folderSizes, setFolderSizes] = useState<Record<string, number>>({});
   const folderSizesRef = useRef<Record<string, number>>({});
 
+  const [homePath, setHomePath] = useState<string | null>(null);
+  const [specialDirs, setSpecialDirs] = useState<SpecialDir[]>([]);
+  const [drives, setDrives] = useState<DriveInfo[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const home = await invoke<string>("home_dir");
+        setHomePath(home);
+      } catch (e) {
+        setError(`Impossible de trouver le dossier utilisateur : ${e}`);
+      }
+      try {
+        const dirs = await invoke<SpecialDir[]>("special_dirs");
+        setSpecialDirs(dirs);
+      } catch {}
+      try {
+        const d = await invoke<DriveInfo[]>("list_drives");
+        setDrives(d);
+      } catch {}
+    })();
+  }, []);
+
   const loadDirectory = useCallback(async (path: string) => {
     setLoading(true);
     setError(null);
@@ -37,6 +72,7 @@ function App() {
       const result = await invoke<FileEntry[]>("list_dir", { path });
       setEntries(result);
       setCurrentPath(path);
+      localStorage.setItem(LAST_PATH_KEY, path);
 
       folderSizesRef.current = {};
       setFolderSizes({});
@@ -61,19 +97,20 @@ function App() {
     }
   }, []);
 
-  const chooseFolder = useCallback(async () => {
-    const selected = await openDialog({ directory: true, multiple: false });
-    if (typeof selected === "string") {
-      setHistory([]);
-      await loadDirectory(selected);
-    }
-  }, [loadDirectory]);
+  useEffect(() => {
+    if (currentPath !== null) return;
+    if (homePath === null) return;
+    const lastPath = localStorage.getItem(LAST_PATH_KEY);
+    void loadDirectory(lastPath || homePath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homePath]);
 
   const navigateTo = useCallback(
     async (path: string) => {
       if (currentPath) {
         setHistory((prev) => [...prev, currentPath]);
       }
+      setForwardHistory([]);
       await loadDirectory(path);
     },
     [currentPath, loadDirectory],
@@ -84,19 +121,33 @@ function App() {
       if (prev.length === 0) return prev;
       const next = [...prev];
       const previous = next.pop()!;
+      if (currentPath) {
+        setForwardHistory((f) => [...f, currentPath]);
+      }
       void loadDirectory(previous);
       return next;
     });
-  }, [loadDirectory]);
+  }, [currentPath, loadDirectory]);
+
+  const goForward = useCallback(async () => {
+    setForwardHistory((prev) => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      const forward = next.pop()!;
+      if (currentPath) {
+        setHistory((h) => [...h, currentPath]);
+      }
+      void loadDirectory(forward);
+      return next;
+    });
+  }, [currentPath, loadDirectory]);
 
   const goUp = useCallback(async () => {
     if (!currentPath) return;
-    const normalized = currentPath.replace(/\//g, "\\");
-    const parts = normalized.split("\\").filter(Boolean);
-    if (parts.length <= 1) return;
-    parts.pop();
-    const parent = parts.join("\\") + "\\";
-    await navigateTo(parent);
+    const parent = parentPath(currentPath);
+    if (parent) {
+      await navigateTo(parent);
+    }
   }, [currentPath, navigateTo]);
 
   const openEntry = useCallback(
@@ -113,6 +164,13 @@ function App() {
     },
     [navigateTo],
   );
+
+  const chooseFolder = useCallback(async () => {
+    const selected = await openDialog({ directory: true, multiple: false });
+    if (typeof selected === "string") {
+      await navigateTo(selected);
+    }
+  }, [navigateTo]);
 
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((currentKey) => {
@@ -166,152 +224,177 @@ function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== "Backspace") return;
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
-        return;
-      }
-      if (history.length > 0) {
+      const inInput =
+        target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+
+      if (e.key === "Backspace" && !inInput && history.length > 0) {
         e.preventDefault();
         void goBack();
+      }
+      if (e.altKey && e.key === "ArrowLeft") {
+        e.preventDefault();
+        void goBack();
+      }
+      if (e.altKey && e.key === "ArrowRight") {
+        e.preventDefault();
+        void goForward();
+      }
+      if (e.altKey && e.key === "ArrowUp") {
+        e.preventDefault();
+        void goUp();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [goBack, history.length]);
+  }, [goBack, goForward, goUp, history.length]);
 
   return (
     <main className="app">
-      <header className="app-header">
-        <div className="brand">
-          <span className="brand-mark">🗂️</span>
-          <span className="brand-name">Noya Explorer</span>
-        </div>
-        <button className="choose-btn" onClick={() => void chooseFolder()}>
-          Choisir un dossier
-        </button>
-      </header>
+      <Sidebar
+        homePath={homePath}
+        specialDirs={specialDirs}
+        drives={drives}
+        currentPath={currentPath}
+        onNavigate={(p) => void navigateTo(p)}
+      />
 
-      {currentPath && (
-        <div className="toolbar">
-          <button
-            className="icon-btn"
-            onClick={() => void goBack()}
-            disabled={history.length === 0}
-            title="Retour"
-          >
-            ←
-          </button>
-          <button
-            className="icon-btn"
-            onClick={() => void goUp()}
-            title="Dossier parent"
-          >
-            ↑
-          </button>
-          <div className="path" title={currentPath}>
-            {currentPath}
+      <div className="main-area">
+        <header className="app-header">
+          <div className="brand">
+            <span className="brand-mark">🗂️</span>
+            <span className="brand-name">Noya Explorer</span>
           </div>
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Rechercher…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
+          <button
+            className="ghost-btn"
+            onClick={() => void chooseFolder()}
+            title="Ouvrir un autre dossier"
+          >
+            📁 Ouvrir…
+          </button>
+        </header>
+
+        {currentPath && (
+          <div className="toolbar">
             <button
               className="icon-btn"
-              onClick={() => setSearch("")}
-              title="Effacer"
+              onClick={() => void goBack()}
+              disabled={history.length === 0}
+              title="Précédent (Alt+←)"
             >
-              ✕
-            </button>
-          )}
-        </div>
-      )}
-
-      {error && <div className="error">{error}</div>}
-
-      {!currentPath && !error && (
-        <section className="empty-state">
-          <h1>Explorez vos fichiers plus intelligemment.</h1>
-          <p>
-            Sélectionnez un dossier pour commencer à parcourir, rechercher et
-            trier son contenu.
-          </p>
-        </section>
-      )}
-
-      {currentPath && (
-        <section className="file-list">
-          <div className="list-header">
-            <span className="col-icon" />
-            <button
-              className={`col-header ${sortKey === "name" ? `active ${sortDir}` : ""}`}
-              onClick={() => toggleSort("name")}
-            >
-              {SORT_LABELS.name}
+              ←
             </button>
             <button
-              className={`col-header col-size ${sortKey === "size" ? `active ${sortDir}` : ""}`}
-              onClick={() => toggleSort("size")}
+              className="icon-btn"
+              onClick={() => void goForward()}
+              disabled={forwardHistory.length === 0}
+              title="Suivant (Alt+→)"
             >
-              {SORT_LABELS.size}
+              →
             </button>
             <button
-              className={`col-header col-type ${sortKey === "type" ? `active ${sortDir}` : ""}`}
-              onClick={() => toggleSort("type")}
+              className="icon-btn"
+              onClick={() => void goUp()}
+              disabled={!parentPath(currentPath)}
+              title="Dossier parent (Alt+↑)"
             >
-              {SORT_LABELS.type}
+              ↑
             </button>
-            <button
-              className={`col-header col-date ${sortKey === "modified" ? `active ${sortDir}` : ""}`}
-              onClick={() => toggleSort("modified")}
-            >
-              {SORT_LABELS.modified}
-            </button>
+            <Breadcrumb
+              path={currentPath}
+              onNavigate={(p) => void navigateTo(p)}
+            />
+            <input
+              className="search-input"
+              type="text"
+              placeholder="Rechercher…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                className="icon-btn"
+                onClick={() => setSearch("")}
+                title="Effacer la recherche"
+              >
+                ✕
+              </button>
+            )}
           </div>
+        )}
 
-          {loading && <div className="status">Chargement…</div>}
-          {!loading && visibleEntries.length === 0 && (
-            <div className="status">
-              {search ? "Aucun résultat." : "Ce dossier est vide."}
+        {error && <div className="error">{error}</div>}
+
+        {currentPath && (
+          <section className="file-list">
+            <div className="list-header">
+              <span className="col-icon" />
+              <button
+                className={`col-header ${sortKey === "name" ? `active ${sortDir}` : ""}`}
+                onClick={() => toggleSort("name")}
+              >
+                {SORT_LABELS.name}
+              </button>
+              <button
+                className={`col-header col-size ${sortKey === "size" ? `active ${sortDir}` : ""}`}
+                onClick={() => toggleSort("size")}
+              >
+                {SORT_LABELS.size}
+              </button>
+              <button
+                className={`col-header col-type ${sortKey === "type" ? `active ${sortDir}` : ""}`}
+                onClick={() => toggleSort("type")}
+              >
+                {SORT_LABELS.type}
+              </button>
+              <button
+                className={`col-header col-date ${sortKey === "modified" ? `active ${sortDir}` : ""}`}
+                onClick={() => toggleSort("modified")}
+              >
+                {SORT_LABELS.modified}
+              </button>
             </div>
-          )}
-          {!loading &&
-            visibleEntries.map((entry) => {
-              const info = getTypeInfo(entry.name, entry.isDir);
-              const size = entry.isDir
-                ? folderSizes[entry.path]
-                : entry.size;
-              return (
-                <button
-                  key={entry.path}
-                  className="file-row"
-                  onClick={() => void openEntry(entry)}
-                  title={entry.path}
-                >
-                  <span className="file-icon">{info.icon}</span>
-                  <span className="file-name">{entry.name}</span>
-                  <span className="file-size">
-                    {entry.isDir
-                      ? size !== undefined
-                        ? formatSize(size)
-                        : "…"
-                      : formatSize(entry.size)}
-                  </span>
-                  <span className="file-type">
-                    {typeLabel(entry.name, entry.isDir)}
-                  </span>
-                  <span className="file-date">
-                    {formatDate(entry.modified)}
-                  </span>
-                </button>
-              );
-            })}
-        </section>
-      )}
+
+            {loading && <div className="status">Chargement…</div>}
+            {!loading && visibleEntries.length === 0 && (
+              <div className="status">
+                {search ? "Aucun résultat." : "Ce dossier est vide."}
+              </div>
+            )}
+            {!loading &&
+              visibleEntries.map((entry) => {
+                const info = getTypeInfo(entry.name, entry.isDir);
+                const size = entry.isDir
+                  ? folderSizes[entry.path]
+                  : entry.size;
+                return (
+                  <button
+                    key={entry.path}
+                    className="file-row"
+                    onClick={() => void openEntry(entry)}
+                    title={entry.path}
+                  >
+                    <span className="file-icon">{info.icon}</span>
+                    <span className="file-name">{entry.name}</span>
+                    <span className="file-size">
+                      {entry.isDir
+                        ? size !== undefined
+                          ? formatSize(size)
+                          : "…"
+                        : formatSize(entry.size)}
+                    </span>
+                    <span className="file-type">
+                      {typeLabel(entry.name, entry.isDir)}
+                    </span>
+                    <span className="file-date">
+                      {formatDate(entry.modified)}
+                    </span>
+                  </button>
+                );
+              })}
+          </section>
+        )}
+      </div>
     </main>
   );
 }

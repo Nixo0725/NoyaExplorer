@@ -9,3 +9,14 @@ export interface FileEntry {
 
 export type SortKey = "name" | "size" | "type" | "modified";
 export type SortDirection = "asc" | "desc";
+
+export interface SpecialDir {
+  label: string;
+  path: string;
+}
+
+export interface DriveInfo {
+  letter: string;
+  path: string;
+  label: string;
+}
