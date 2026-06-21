@@ -5,6 +5,7 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import "./App.css";
 import type {
   FileEntry,
+  StorageStats,
   SortKey,
   SortDirection,
   SpecialDir,
@@ -12,7 +13,7 @@ import type {
 } from "./types";
 import { formatSize, formatDate } from "./lib/format";
 import { getTypeInfo } from "./lib/fileType";
-import { typeLabel } from "./lib/category";
+import { categoryLabel, typeLabel } from "./lib/category";
 import { parentPath } from "./lib/path";
 import Sidebar from "./components/Sidebar";
 import Breadcrumb from "./components/Breadcrumb";
@@ -41,6 +42,9 @@ function App() {
   const [folderSizes, setFolderSizes] = useState<Record<string, number>>({});
   const folderSizesRef = useRef<Record<string, number>>({});
 
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
   const [homePath, setHomePath] = useState<string | null>(null);
   const [specialDirs, setSpecialDirs] = useState<SpecialDir[]>([]);
   const [drives, setDrives] = useState<DriveInfo[]>([]);
@@ -68,6 +72,7 @@ function App() {
     setLoading(true);
     setError(null);
     setSearch("");
+    setStorageStats(null);
     try {
       const result = await invoke<FileEntry[]>("list_dir", { path });
       setEntries(result);
@@ -172,6 +177,22 @@ function App() {
     }
   }, [navigateTo]);
 
+  const analyzeStorage = useCallback(async () => {
+    if (!currentPath) return;
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const stats = await invoke<StorageStats>("storage_stats", {
+        path: currentPath,
+      });
+      setStorageStats(stats);
+    } catch (e) {
+      setError(`Analyse impossible : ${e}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [currentPath]);
+
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((currentKey) => {
       if (currentKey === key) {
@@ -265,13 +286,25 @@ function App() {
             <span className="brand-mark">🗂️</span>
             <span className="brand-name">Noya Explorer</span>
           </div>
-          <button
-            className="ghost-btn"
-            onClick={() => void chooseFolder()}
-            title="Ouvrir un autre dossier"
-          >
-            📁 Ouvrir…
-          </button>
+          <div className="header-actions">
+            {currentPath && (
+              <button
+                className="ghost-btn"
+                onClick={() => void analyzeStorage()}
+                disabled={analyzing}
+                title="Analyser le stockage du dossier courant"
+              >
+                {analyzing ? "Analyse…" : "📊 Analyser le stockage"}
+              </button>
+            )}
+            <button
+              className="ghost-btn"
+              onClick={() => void chooseFolder()}
+              title="Ouvrir un autre dossier"
+            >
+              📁 Ouvrir…
+            </button>
+          </div>
         </header>
 
         {currentPath && (
@@ -326,73 +359,116 @@ function App() {
         {error && <div className="error">{error}</div>}
 
         {currentPath && (
-          <section className="file-list">
-            <div className="list-header">
-              <span className="col-icon" />
-              <button
-                className={`col-header ${sortKey === "name" ? `active ${sortDir}` : ""}`}
-                onClick={() => toggleSort("name")}
-              >
-                {SORT_LABELS.name}
-              </button>
-              <button
-                className={`col-header col-size ${sortKey === "size" ? `active ${sortDir}` : ""}`}
-                onClick={() => toggleSort("size")}
-              >
-                {SORT_LABELS.size}
-              </button>
-              <button
-                className={`col-header col-type ${sortKey === "type" ? `active ${sortDir}` : ""}`}
-                onClick={() => toggleSort("type")}
-              >
-                {SORT_LABELS.type}
-              </button>
-              <button
-                className={`col-header col-date ${sortKey === "modified" ? `active ${sortDir}` : ""}`}
-                onClick={() => toggleSort("modified")}
-              >
-                {SORT_LABELS.modified}
-              </button>
-            </div>
-
-            {loading && <div className="status">Chargement…</div>}
-            {!loading && visibleEntries.length === 0 && (
-              <div className="status">
-                {search ? "Aucun résultat." : "Ce dossier est vide."}
+          <div className="content">
+            <section className="file-list">
+              <div className="list-header">
+                <span className="col-icon" />
+                <button
+                  className={`col-header ${sortKey === "name" ? `active ${sortDir}` : ""}`}
+                  onClick={() => toggleSort("name")}
+                >
+                  {SORT_LABELS.name}
+                </button>
+                <button
+                  className={`col-header col-size ${sortKey === "size" ? `active ${sortDir}` : ""}`}
+                  onClick={() => toggleSort("size")}
+                >
+                  {SORT_LABELS.size}
+                </button>
+                <button
+                  className={`col-header col-type ${sortKey === "type" ? `active ${sortDir}` : ""}`}
+                  onClick={() => toggleSort("type")}
+                >
+                  {SORT_LABELS.type}
+                </button>
+                <button
+                  className={`col-header col-date ${sortKey === "modified" ? `active ${sortDir}` : ""}`}
+                  onClick={() => toggleSort("modified")}
+                >
+                  {SORT_LABELS.modified}
+                </button>
               </div>
+
+              {loading && <div className="status">Chargement…</div>}
+              {!loading && visibleEntries.length === 0 && (
+                <div className="status">
+                  {search ? "Aucun résultat." : "Ce dossier est vide."}
+                </div>
+              )}
+              {!loading &&
+                visibleEntries.map((entry) => {
+                  const info = getTypeInfo(entry.name, entry.isDir);
+                  const size = entry.isDir
+                    ? folderSizes[entry.path]
+                    : entry.size;
+                  return (
+                    <button
+                      key={entry.path}
+                      className="file-row"
+                      onClick={() => void openEntry(entry)}
+                      title={entry.path}
+                    >
+                      <span className="file-icon">{info.icon}</span>
+                      <span className="file-name">{entry.name}</span>
+                      <span className="file-size">
+                        {entry.isDir
+                          ? size !== undefined
+                            ? formatSize(size)
+                            : "…"
+                          : formatSize(entry.size)}
+                      </span>
+                      <span className="file-type">
+                        {typeLabel(entry.name, entry.isDir)}
+                      </span>
+                      <span className="file-date">
+                        {formatDate(entry.modified)}
+                      </span>
+                    </button>
+                  );
+                })}
+            </section>
+
+            {storageStats && (
+              <aside className="storage-panel">
+                <h2>Aperçu du stockage</h2>
+                <div className="storage-total">
+                  <span className="label">Total</span>
+                  <strong>{formatSize(storageStats.totalSize)}</strong>
+                </div>
+                <div className="storage-total">
+                  <span className="label">Fichiers</span>
+                  <strong>{storageStats.fileCount.toLocaleString()}</strong>
+                </div>
+                <h3>Répartition par catégorie</h3>
+                {storageStats.byCategory.length === 0 && (
+                  <p className="muted">Aucun fichier dans ce dossier.</p>
+                )}
+                {storageStats.byCategory.map((cat) => {
+                  const percent =
+                    storageStats.totalSize > 0
+                      ? (cat.size / storageStats.totalSize) * 100
+                      : 0;
+                  return (
+                    <div key={cat.category} className="storage-bar">
+                      <div className="storage-bar-label">
+                        <span>{categoryLabel(cat.category)}</span>
+                        <span className="muted">
+                          {formatSize(cat.size)} · {cat.count.toLocaleString()}{" "}
+                          fichier{cat.count > 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <div className="bar-track">
+                        <div
+                          className="bar-fill"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </aside>
             )}
-            {!loading &&
-              visibleEntries.map((entry) => {
-                const info = getTypeInfo(entry.name, entry.isDir);
-                const size = entry.isDir
-                  ? folderSizes[entry.path]
-                  : entry.size;
-                return (
-                  <button
-                    key={entry.path}
-                    className="file-row"
-                    onClick={() => void openEntry(entry)}
-                    title={entry.path}
-                  >
-                    <span className="file-icon">{info.icon}</span>
-                    <span className="file-name">{entry.name}</span>
-                    <span className="file-size">
-                      {entry.isDir
-                        ? size !== undefined
-                          ? formatSize(size)
-                          : "…"
-                        : formatSize(entry.size)}
-                    </span>
-                    <span className="file-type">
-                      {typeLabel(entry.name, entry.isDir)}
-                    </span>
-                    <span className="file-date">
-                      {formatDate(entry.modified)}
-                    </span>
-                  </button>
-                );
-              })}
-          </section>
+          </div>
         )}
       </div>
     </main>

@@ -20,3 +20,15 @@ export interface DriveInfo {
   path: string;
   label: string;
 }
+
+export interface CategoryStat {
+  category: string;
+  size: number;
+  count: number;
+}
+
+export interface StorageStats {
+  totalSize: number;
+  fileCount: number;
+  byCategory: CategoryStat[];
+}

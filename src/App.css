@@ -117,6 +117,12 @@ body {
   font-size: 16px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ghost-btn {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
@@ -129,8 +135,13 @@ body {
   transition: background 0.15s ease;
 }
 
-.ghost-btn:hover {
+.ghost-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.12);
+}
+
+.ghost-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Toolbar */
@@ -245,9 +256,21 @@ body {
   border-color: #38bdf8;
 }
 
+/* Content layout */
+.content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 340px);
+  gap: 0;
+  min-height: 0;
+}
+
+.content:not(:has(.storage-panel)) {
+  grid-template-columns: 1fr;
+}
+
 /* File list */
 .file-list {
-  flex: 1;
   display: flex;
   flex-direction: column;
   padding: 0 8px 24px;
@@ -362,6 +385,73 @@ body {
 .file-size,
 .file-date {
   text-align: right;
+}
+
+/* Storage panel */
+.storage-panel {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.6);
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.storage-panel h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.storage-panel h3 {
+  margin: 20px 0 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.storage-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.storage-total .label {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.storage-total strong {
+  font-size: 18px;
+}
+
+.storage-bar {
+  margin-bottom: 12px;
+}
+
+.storage-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.bar-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #a855f7);
+  transition: width 0.3s ease;
+}
+
+.muted {
+  color: #94a3b8;
 }
 
 .error {

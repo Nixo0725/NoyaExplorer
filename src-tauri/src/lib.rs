@@ -79,6 +79,108 @@ fn compute_dir_size(path: &Path) -> u64 {
     total
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryStat {
+    pub category: String,
+    pub size: u64,
+    pub count: u64,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageStats {
+    pub total_size: u64,
+    pub file_count: u64,
+    pub by_category: Vec<CategoryStat>,
+}
+
+/// Recursively scans a directory and aggregates storage usage by file category.
+#[tauri::command]
+fn storage_stats(path: &str) -> Result<StorageStats, String> {
+    let root = Path::new(path);
+    if !root.is_dir() {
+        return Err(format!("{} is not a directory", path));
+    }
+
+    let mut stats = StorageStats {
+        total_size: 0,
+        file_count: 0,
+        by_category: Vec::new(),
+    };
+
+    let mut index: std::collections::HashMap<String, (u64, u64)> =
+        std::collections::HashMap::new();
+
+    accumulate_storage(root, &mut stats.total_size, &mut stats.file_count, &mut index);
+
+    stats.by_category = index
+        .into_iter()
+        .map(|(category, (size, count))| CategoryStat {
+            category,
+            size,
+            count,
+        })
+        .collect();
+
+    stats.by_category.sort_by(|a, b| b.size.cmp(&a.size));
+
+    Ok(stats)
+}
+
+fn accumulate_storage(
+    path: &Path,
+    total_size: &mut u64,
+    file_count: &mut u64,
+    index: &mut std::collections::HashMap<String, (u64, u64)>,
+) {
+    let read_dir = match std::fs::read_dir(path) {
+        Ok(rd) => rd,
+        Err(_) => return,
+    };
+
+    for entry in read_dir.flatten() {
+        let metadata = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        if metadata.is_dir() {
+            accumulate_storage(&entry.path(), total_size, file_count, index);
+        } else {
+            let size = metadata.len();
+            *total_size += size;
+            *file_count += 1;
+
+            let name = entry.file_name().to_string_lossy().to_string();
+            let category = categorize(&name).to_string();
+            let entry = index.entry(category).or_insert((0, 0));
+            entry.0 += size;
+            entry.1 += 1;
+        }
+    }
+}
+
+/// Maps a file name to a category string, mirroring the frontend `fileType.ts` logic.
+fn categorize(name: &str) -> &'static str {
+    let dot_index = match name.rfind('.') {
+        Some(i) if i > 0 => i,
+        _ => return "other",
+    };
+
+    let ext = &name[dot_index + 1..].to_lowercase();
+    match ext.as_str() {
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" => "image",
+        "mp4" | "mkv" | "mov" | "avi" | "webm" => "video",
+        "mp3" | "wav" | "flac" | "ogg" => "audio",
+        "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "txt" | "md" => "document",
+        "zip" | "rar" | "7z" | "tar" | "gz" => "archive",
+        "js" | "ts" | "tsx" | "jsx" | "rs" | "py" | "json" | "html" | "css" => "code",
+        "exe" | "msi" | "bat" | "sh" => "executable",
+        _ => "other",
+    }
+}
+
 /// Returns the user's home directory path.
 #[tauri::command]
 fn home_dir() -> Result<String, String> {
@@ -186,6 +288,7 @@ pub fn run() {
             greet,
             list_dir,
             folder_size,
+            storage_stats,
             home_dir,
             special_dirs,
             list_drives
