@@ -11,64 +11,63 @@ export type FileCategory =
 
 interface TypeInfo {
   category: FileCategory;
-  icon: string;
 }
 
 const EXTENSION_MAP: Record<string, TypeInfo> = {
   // Images
-  png: { category: "image", icon: "🖼️" },
-  jpg: { category: "image", icon: "🖼️" },
-  jpeg: { category: "image", icon: "🖼️" },
-  gif: { category: "image", icon: "🖼️" },
-  webp: { category: "image", icon: "🖼️" },
-  svg: { category: "image", icon: "🖼️" },
-  bmp: { category: "image", icon: "🖼️" },
+  png: { category: "image" },
+  jpg: { category: "image" },
+  jpeg: { category: "image" },
+  gif: { category: "image" },
+  webp: { category: "image" },
+  svg: { category: "image" },
+  bmp: { category: "image" },
   // Videos
-  mp4: { category: "video", icon: "🎬" },
-  mkv: { category: "video", icon: "🎬" },
-  mov: { category: "video", icon: "🎬" },
-  avi: { category: "video", icon: "🎬" },
-  webm: { category: "video", icon: "🎬" },
+  mp4: { category: "video" },
+  mkv: { category: "video" },
+  mov: { category: "video" },
+  avi: { category: "video" },
+  webm: { category: "video" },
   // Audio
-  mp3: { category: "audio", icon: "🎵" },
-  wav: { category: "audio", icon: "🎵" },
-  flac: { category: "audio", icon: "🎵" },
-  ogg: { category: "audio", icon: "🎵" },
+  mp3: { category: "audio" },
+  wav: { category: "audio" },
+  flac: { category: "audio" },
+  ogg: { category: "audio" },
   // Documents
-  pdf: { category: "document", icon: "📄" },
-  doc: { category: "document", icon: "📄" },
-  docx: { category: "document", icon: "📄" },
-  xls: { category: "document", icon: "📄" },
-  xlsx: { category: "document", icon: "📄" },
-  ppt: { category: "document", icon: "📄" },
-  pptx: { category: "document", icon: "📄" },
-  txt: { category: "document", icon: "📄" },
-  md: { category: "document", icon: "📄" },
+  pdf: { category: "document" },
+  doc: { category: "document" },
+  docx: { category: "document" },
+  xls: { category: "document" },
+  xlsx: { category: "document" },
+  ppt: { category: "document" },
+  pptx: { category: "document" },
+  txt: { category: "document" },
+  md: { category: "document" },
   // Archives
-  zip: { category: "archive", icon: "🗜️" },
-  rar: { category: "archive", icon: "🗜️" },
-  "7z": { category: "archive", icon: "🗜️" },
-  tar: { category: "archive", icon: "🗜️" },
-  gz: { category: "archive", icon: "🗜️" },
+  zip: { category: "archive" },
+  rar: { category: "archive" },
+  "7z": { category: "archive" },
+  tar: { category: "archive" },
+  gz: { category: "archive" },
   // Code
-  js: { category: "code", icon: "📜" },
-  ts: { category: "code", icon: "📜" },
-  tsx: { category: "code", icon: "📜" },
-  jsx: { category: "code", icon: "📜" },
-  rs: { category: "code", icon: "📜" },
-  py: { category: "code", icon: "📜" },
-  json: { category: "code", icon: "📜" },
-  html: { category: "code", icon: "📜" },
-  css: { category: "code", icon: "📜" },
+  js: { category: "code" },
+  ts: { category: "code" },
+  tsx: { category: "code" },
+  jsx: { category: "code" },
+  rs: { category: "code" },
+  py: { category: "code" },
+  json: { category: "code" },
+  html: { category: "code" },
+  css: { category: "code" },
   // Executables
-  exe: { category: "executable", icon: "⚙️" },
-  msi: { category: "executable", icon: "⚙️" },
-  bat: { category: "executable", icon: "⚙️" },
-  sh: { category: "executable", icon: "⚙️" },
+  exe: { category: "executable" },
+  msi: { category: "executable" },
+  bat: { category: "executable" },
+  sh: { category: "executable" },
 };
 
-const FOLDER_INFO: TypeInfo = { category: "folder", icon: "📁" };
-const OTHER_INFO: TypeInfo = { category: "other", icon: "📄" };
+const FOLDER_INFO: TypeInfo = { category: "folder" };
+const OTHER_INFO: TypeInfo = { category: "other" };
 
 export function getTypeInfo(name: string, isDir: boolean): TypeInfo {
   if (isDir) return FOLDER_INFO;

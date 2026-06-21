@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { FolderTree, BarChart3, FolderOpen } from "lucide-react";
 import "./App.css";
 import type {
   FileEntry,
@@ -17,6 +18,7 @@ import { categoryLabel, typeLabel } from "./lib/category";
 import { parentPath } from "./lib/path";
 import Sidebar from "./components/Sidebar";
 import Breadcrumb from "./components/Breadcrumb";
+import FileIcon from "./components/FileIcon";
 
 const SORT_LABELS: Record<SortKey, string> = {
   name: "Nom",
@@ -283,7 +285,7 @@ function App() {
       <div className="main-area">
         <header className="app-header">
           <div className="brand">
-            <span className="brand-mark">🗂️</span>
+            <span className="brand-mark"><FolderTree size={20} /></span>
             <span className="brand-name">Noya Explorer</span>
           </div>
           <div className="header-actions">
@@ -294,7 +296,7 @@ function App() {
                 disabled={analyzing}
                 title="Analyser le stockage du dossier courant"
               >
-                {analyzing ? "Analyse…" : "📊 Analyser le stockage"}
+                {analyzing ? "Analyse…" : (<><BarChart3 size={14} /> Analyser le stockage</>)}
               </button>
             )}
             <button
@@ -302,7 +304,7 @@ function App() {
               onClick={() => void chooseFolder()}
               title="Ouvrir un autre dossier"
             >
-              📁 Ouvrir…
+              <><FolderOpen size={14} /> Ouvrir…</>
             </button>
           </div>
         </header>
@@ -408,7 +410,7 @@ function App() {
                       onClick={() => void openEntry(entry)}
                       title={entry.path}
                     >
-                      <span className="file-icon">{info.icon}</span>
+                      <span className="file-icon"><FileIcon category={info.category} /></span>
                       <span className="file-name">{entry.name}</span>
                       <span className="file-size">
                         {entry.isDir

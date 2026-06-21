@@ -1,3 +1,4 @@
+import { Home, Monitor, FileText, Download, HardDrive, Folder } from "lucide-react";
 import type { SpecialDir, DriveInfo } from "../types";
 
 interface SidebarProps {
@@ -6,6 +7,13 @@ interface SidebarProps {
   drives: DriveInfo[];
   currentPath: string | null;
   onNavigate: (path: string) => void;
+}
+
+function specialDirIcon(label: string) {
+  if (label === "Bureau") return <Monitor size={16} />;
+  if (label === "Documents") return <FileText size={16} />;
+  if (label === "Téléchargements") return <Download size={16} />;
+  return <Folder size={16} />;
 }
 
 function Sidebar({
@@ -30,7 +38,9 @@ function Sidebar({
             onClick={() => onNavigate(homePath)}
             title={homePath}
           >
-            <span className="sidebar-icon">🏠</span>
+            <span className="sidebar-icon">
+              <Home size={16} />
+            </span>
             <span className="sidebar-label">Accueil</span>
           </button>
         )}
@@ -41,15 +51,7 @@ function Sidebar({
             onClick={() => onNavigate(dir.path)}
             title={dir.path}
           >
-            <span className="sidebar-icon">
-              {dir.label === "Bureau"
-                ? "🖥️"
-                : dir.label === "Documents"
-                  ? "📄"
-                  : dir.label === "Téléchargements"
-                    ? "⬇️"
-                    : "📁"}
-            </span>
+            <span className="sidebar-icon">{specialDirIcon(dir.label)}</span>
             <span className="sidebar-label">{dir.label}</span>
           </button>
         ))}
@@ -65,7 +67,9 @@ function Sidebar({
               onClick={() => onNavigate(drive.path)}
               title={drive.path}
             >
-              <span className="sidebar-icon">💽</span>
+              <span className="sidebar-icon">
+                <HardDrive size={16} />
+              </span>
               <span className="sidebar-label">{drive.label}</span>
             </button>
           ))}
