@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 #[derive(serde::Serialize)]
@@ -45,12 +46,38 @@ fn list_dir(path: &str) -> Result<Vec<FileEntry>, String> {
     Ok(entries)
 }
 
+#[tauri::command]
+fn folder_size(path: &str) -> Result<u64, String> {
+    Ok(compute_dir_size(Path::new(path)))
+}
+
+fn compute_dir_size(path: &Path) -> u64 {
+    let read_dir = match std::fs::read_dir(path) {
+        Ok(rd) => rd,
+        Err(_) => return 0,
+    };
+
+    let mut total = 0u64;
+    for entry in read_dir.flatten() {
+        let metadata = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if metadata.is_dir() {
+            total += compute_dir_size(&entry.path());
+        } else {
+            total += metadata.len();
+        }
+    }
+    total
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![greet, list_dir])
+        .invoke_handler(tauri::generate_handler![greet, list_dir, folder_size])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

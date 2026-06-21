@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import "./App.css";
-import type { FileEntry } from "./types";
+import type { FileEntry, SortKey, SortDirection } from "./types";
 import { formatSize, formatDate } from "./lib/format";
 import { getTypeInfo } from "./lib/fileType";
+import { typeLabel } from "./lib/category";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  name: "Nom",
+  size: "Taille",
+  type: "Type",
+  modified: "Date",
+};
 
 function App() {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
@@ -14,13 +22,37 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDirection>("asc");
+
+  const [folderSizes, setFolderSizes] = useState<Record<string, number>>({});
+  const folderSizesRef = useRef<Record<string, number>>({});
+
   const loadDirectory = useCallback(async (path: string) => {
     setLoading(true);
     setError(null);
+    setSearch("");
     try {
       const result = await invoke<FileEntry[]>("list_dir", { path });
       setEntries(result);
       setCurrentPath(path);
+
+      folderSizesRef.current = {};
+      setFolderSizes({});
+
+      const folders = result.filter((e) => e.isDir);
+      for (const folder of folders) {
+        invoke<number>("folder_size", { path: folder.path })
+          .then((size) => {
+            folderSizesRef.current = {
+              ...folderSizesRef.current,
+              [folder.path]: size,
+            };
+            setFolderSizes({ ...folderSizesRef.current });
+          })
+          .catch(() => {});
+      }
     } catch (e) {
       setError(String(e));
       setEntries([]);
@@ -82,6 +114,56 @@ function App() {
     [navigateTo],
   );
 
+  const toggleSort = useCallback((key: SortKey) => {
+    setSortKey((currentKey) => {
+      if (currentKey === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return currentKey;
+      }
+      setSortDir("asc");
+      return key;
+    });
+  }, []);
+
+  const visibleEntries = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const filtered = query
+      ? entries.filter((e) => e.name.toLowerCase().includes(query))
+      : entries;
+
+    const dir = sortDir === "asc" ? 1 : -1;
+    const sorted = [...filtered].sort((a, b) => {
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+
+      let cmp = 0;
+      switch (sortKey) {
+        case "name":
+          cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+          break;
+        case "size": {
+          const aSize = a.isDir ? folderSizes[a.path] ?? 0 : a.size;
+          const bSize = b.isDir ? folderSizes[b.path] ?? 0 : b.size;
+          cmp = aSize - bSize;
+          break;
+        }
+        case "type":
+          cmp = typeLabel(a.name, a.isDir).localeCompare(
+            typeLabel(b.name, b.isDir),
+          );
+          break;
+        case "modified":
+          cmp = a.modified - b.modified;
+          break;
+      }
+      if (cmp === 0) {
+        cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      }
+      return cmp * dir;
+    });
+
+    return sorted;
+  }, [entries, search, sortKey, sortDir, folderSizes]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Backspace") return;
@@ -130,6 +212,22 @@ function App() {
           <div className="path" title={currentPath}>
             {currentPath}
           </div>
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Rechercher…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button
+              className="icon-btn"
+              onClick={() => setSearch("")}
+              title="Effacer"
+            >
+              ✕
+            </button>
+          )}
         </div>
       )}
 
@@ -139,20 +237,54 @@ function App() {
         <section className="empty-state">
           <h1>Explorez vos fichiers plus intelligemment.</h1>
           <p>
-            Sélectionnez un dossier pour commencer à parcourir son contenu.
+            Sélectionnez un dossier pour commencer à parcourir, rechercher et
+            trier son contenu.
           </p>
         </section>
       )}
 
       {currentPath && (
         <section className="file-list">
+          <div className="list-header">
+            <span className="col-icon" />
+            <button
+              className={`col-header ${sortKey === "name" ? `active ${sortDir}` : ""}`}
+              onClick={() => toggleSort("name")}
+            >
+              {SORT_LABELS.name}
+            </button>
+            <button
+              className={`col-header col-size ${sortKey === "size" ? `active ${sortDir}` : ""}`}
+              onClick={() => toggleSort("size")}
+            >
+              {SORT_LABELS.size}
+            </button>
+            <button
+              className={`col-header col-type ${sortKey === "type" ? `active ${sortDir}` : ""}`}
+              onClick={() => toggleSort("type")}
+            >
+              {SORT_LABELS.type}
+            </button>
+            <button
+              className={`col-header col-date ${sortKey === "modified" ? `active ${sortDir}` : ""}`}
+              onClick={() => toggleSort("modified")}
+            >
+              {SORT_LABELS.modified}
+            </button>
+          </div>
+
           {loading && <div className="status">Chargement…</div>}
-          {!loading && entries.length === 0 && (
-            <div className="status">Ce dossier est vide.</div>
+          {!loading && visibleEntries.length === 0 && (
+            <div className="status">
+              {search ? "Aucun résultat." : "Ce dossier est vide."}
+            </div>
           )}
           {!loading &&
-            entries.map((entry) => {
+            visibleEntries.map((entry) => {
               const info = getTypeInfo(entry.name, entry.isDir);
+              const size = entry.isDir
+                ? folderSizes[entry.path]
+                : entry.size;
               return (
                 <button
                   key={entry.path}
@@ -163,9 +295,18 @@ function App() {
                   <span className="file-icon">{info.icon}</span>
                   <span className="file-name">{entry.name}</span>
                   <span className="file-size">
-                    {entry.isDir ? "—" : formatSize(entry.size)}
+                    {entry.isDir
+                      ? size !== undefined
+                        ? formatSize(size)
+                        : "…"
+                      : formatSize(entry.size)}
                   </span>
-                  <span className="file-date">{formatDate(entry.modified)}</span>
+                  <span className="file-type">
+                    {typeLabel(entry.name, entry.isDir)}
+                  </span>
+                  <span className="file-date">
+                    {formatDate(entry.modified)}
+                  </span>
                 </button>
               );
             })}

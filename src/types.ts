@@ -5,3 +5,6 @@ export interface FileEntry {
   size: number;
   modified: number;
 }
+
+export type SortKey = "name" | "size" | "type" | "modified";
+export type SortDirection = "asc" | "desc";
