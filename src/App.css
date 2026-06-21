@@ -1,0 +1,108 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  background: #0b0f19;
+  color: #f8fafc;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 64px;
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(168, 85, 247, 0.16), transparent 30%),
+    #0b0f19;
+}
+
+.hero {
+  max-width: 760px;
+}
+
+.eyebrow {
+  color: #38bdf8;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(48px, 8vw, 92px);
+  line-height: 0.95;
+}
+
+.subtitle {
+  max-width: 620px;
+  margin-top: 24px;
+  color: #cbd5e1;
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 32px;
+}
+
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 14px 22px;
+  background: #38bdf8;
+  color: #020617;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 56px;
+  max-width: 900px;
+}
+
+.card,
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.72);
+  border-radius: 24px;
+  padding: 24px;
+  backdrop-filter: blur(16px);
+}
+
+.label {
+  display: block;
+  color: #94a3b8;
+  margin-bottom: 12px;
+}
+
+strong {
+  font-size: 36px;
+}
+
+.panel {
+  max-width: 900px;
+  margin-top: 16px;
+}
+
+.panel h2 {
+  margin-top: 0;
+}
+
+.panel p {
+  color: #cbd5e1;
+  line-height: 1.6;
+}
