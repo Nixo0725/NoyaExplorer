@@ -29,20 +29,21 @@ const CATEGORY_ICON: Record<FileCategory, LucideIcon> = {
   other: File,
 };
 
-const CATEGORY_COLOR: Record<FileCategory, string> = {
-  folder: "#64748b",
-  image: "#94a3b8",
-  video: "#94a3b8",
-  audio: "#94a3b8",
-  document: "#94a3b8",
-  archive: "#94a3b8",
-  code: "#94a3b8",
-  executable: "#94a3b8",
-  other: "#94a3b8",
+/** Variables CSS correspondant aux couleurs de chaque catégorie. */
+const CATEGORY_COLOR_VAR: Record<FileCategory, string> = {
+  folder: "var(--cat-folder)",
+  image: "var(--cat-image)",
+  video: "var(--cat-video)",
+  audio: "var(--cat-audio)",
+  document: "var(--cat-document)",
+  archive: "var(--cat-archive)",
+  code: "var(--cat-code)",
+  executable: "var(--cat-executable)",
+  other: "var(--cat-other)",
 };
 
 export default function FileIcon({ category, size = 16 }: FileIconProps) {
   const Icon = CATEGORY_ICON[category];
-  const color = CATEGORY_COLOR[category];
+  const color = CATEGORY_COLOR_VAR[category];
   return <Icon size={size} color={color} />;
 }

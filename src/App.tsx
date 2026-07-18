@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
-import { FolderTree, BarChart3, FolderOpen } from "lucide-react";
+import {
+  FolderOpen,
+  FolderPlus,
+  FilePlus,
+  Trash2,
+  Copy,
+  ClipboardPaste,
+  Scissors,
+  Folder,
+  FileText,
+  Pencil,
+  Info,
+} from "lucide-react";
 import "./App.css";
 import type {
   FileEntry,
@@ -11,14 +22,20 @@ import type {
   SortDirection,
   SpecialDir,
   DriveInfo,
+  ClipboardState,
 } from "./types";
 import { formatSize, formatDate } from "./lib/format";
 import { getTypeInfo } from "./lib/fileType";
 import { categoryLabel, typeLabel } from "./lib/category";
-import { parentPath } from "./lib/path";
+import { parentPath, joinPath } from "./lib/path";
 import Sidebar from "./components/Sidebar";
 import Breadcrumb from "./components/Breadcrumb";
 import FileIcon from "./components/FileIcon";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import SettingsPanel from "./components/SettingsPanel";
+import ContextMenu, { type ContextMenuItem } from "./components/ContextMenu";
+import Dialog from "./components/Dialog";
+import PropertiesPanel from "./components/PropertiesPanel";
 
 const SORT_LABELS: Record<SortKey, string> = {
   name: "Nom",
@@ -29,7 +46,23 @@ const SORT_LABELS: Record<SortKey, string> = {
 
 const LAST_PATH_KEY = "noya:lastPath";
 
-function App() {
+type DialogState =
+  | { type: "create-dir" }
+  | { type: "create-file" }
+  | { type: "rename"; path: string; name: string }
+  | { type: "delete"; paths: string[]; names: string[] }
+  | null;
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+}
+
+function AppContent() {
+  const [showSettings, setShowSettings] = useState(false);
+  const [propertiesPath, setPropertiesPath] = useState<string | null>(null);
+
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [history, setHistory] = useState<string[]>([]);
@@ -50,6 +83,19 @@ function App() {
   const [homePath, setHomePath] = useState<string | null>(null);
   const [specialDirs, setSpecialDirs] = useState<SpecialDir[]>([]);
   const [drives, setDrives] = useState<DriveInfo[]>([]);
+
+  // Sélection multiple
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const lastSelectedPath = useRef<string | null>(null);
+
+  // Presse-papier
+  const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
+
+  // Menu contextuel
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+  // Dialogs
+  const [dialog, setDialog] = useState<DialogState>(null);
 
   useEffect(() => {
     (async () => {
@@ -75,6 +121,8 @@ function App() {
     setError(null);
     setSearch("");
     setStorageStats(null);
+    setSelectedPaths(new Set());
+    lastSelectedPath.current = null;
     try {
       const result = await invoke<FileEntry[]>("list_dir", { path });
       setEntries(result);
@@ -163,7 +211,7 @@ function App() {
         await navigateTo(entry.path);
       } else {
         try {
-          await openPath(entry.path);
+          await invoke("open_file", { path: entry.path });
         } catch (e) {
           setError(`Impossible d'ouvrir le fichier : ${e}`);
         }
@@ -245,12 +293,262 @@ function App() {
     return sorted;
   }, [entries, search, sortKey, sortDir, folderSizes]);
 
+  /* ---------- Sélection ---------- */
+
+  const handleRowClick = useCallback(
+    (e: React.MouseEvent, entry: FileEntry) => {
+      e.stopPropagation();
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+clic : bascule
+        setSelectedPaths((prev) => {
+          const next = new Set(prev);
+          if (next.has(entry.path)) {
+            next.delete(entry.path);
+          } else {
+            next.add(entry.path);
+          }
+          return next;
+        });
+        lastSelectedPath.current = entry.path;
+      } else if (e.shiftKey && lastSelectedPath.current) {
+        // Shift+clic : plage
+        const paths = visibleEntries.map((e) => e.path);
+        const startIdx = paths.indexOf(lastSelectedPath.current);
+        const endIdx = paths.indexOf(entry.path);
+        if (startIdx >= 0 && endIdx >= 0) {
+          const [from, to] =
+            startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          const range = new Set(paths.slice(from, to + 1));
+          setSelectedPaths(range);
+        }
+      } else {
+        // Clic simple : ouvrir si dossier, sinon sélection unique
+        if (entry.isDir) {
+          void openEntry(entry);
+        } else {
+          setSelectedPaths(new Set([entry.path]));
+          lastSelectedPath.current = entry.path;
+        }
+      }
+    },
+    [visibleEntries, openEntry],
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelectedPaths(new Set());
+    lastSelectedPath.current = null;
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelectedPaths(new Set(visibleEntries.map((e) => e.path)));
+  }, [visibleEntries]);
+
+  /* ---------- Actions CRUD ---------- */
+
+  const refresh = useCallback(() => {
+    if (currentPath) void loadDirectory(currentPath);
+  }, [currentPath, loadDirectory]);
+
+  const handleCreateDir = useCallback(
+    async (name: string) => {
+      if (!currentPath) return;
+      try {
+        await invoke("create_dir", { path: joinPath(currentPath, name) });
+        setDialog(null);
+        refresh();
+      } catch (e) {
+        setError(`Impossible de créer le dossier : ${e}`);
+      }
+    },
+    [currentPath, refresh],
+  );
+
+  const handleCreateFile = useCallback(
+    async (name: string) => {
+      if (!currentPath) return;
+      try {
+        await invoke("create_file", { path: joinPath(currentPath, name) });
+        setDialog(null);
+        refresh();
+      } catch (e) {
+        setError(`Impossible de créer le fichier : ${e}`);
+      }
+    },
+    [currentPath, refresh],
+  );
+
+  const handleRename = useCallback(
+    async (newName: string) => {
+      if (!dialog || dialog.type !== "rename") return;
+      const newPath = joinPath(parentPath(dialog.path) || "", newName);
+      try {
+        await invoke("rename_entry", {
+          oldPath: dialog.path,
+          newPath,
+        });
+        setDialog(null);
+        refresh();
+      } catch (e) {
+        setError(`Impossible de renommer : ${e}`);
+      }
+    },
+    [dialog, refresh],
+  );
+
+  const handleDelete = useCallback(async () => {
+    if (!dialog || dialog.type !== "delete") return;
+    for (const p of dialog.paths) {
+      try {
+        await invoke("delete_entry", { path: p });
+      } catch (e) {
+        setError(`Impossible de supprimer ${p} : ${e}`);
+      }
+    }
+    setDialog(null);
+    clearSelection();
+    refresh();
+  }, [dialog, clearSelection, refresh]);
+
+  /* ---------- Presse-papier ---------- */
+
+  const copySelection = useCallback(() => {
+    if (selectedPaths.size === 0) return;
+    setClipboard({ paths: [...selectedPaths], operation: "copy" });
+  }, [selectedPaths]);
+
+  const cutSelection = useCallback(() => {
+    if (selectedPaths.size === 0) return;
+    setClipboard({ paths: [...selectedPaths], operation: "cut" });
+  }, [selectedPaths]);
+
+  const pasteClipboard = useCallback(async () => {
+    if (!clipboard || !currentPath) return;
+    for (const src of clipboard.paths) {
+      const name = src.split(/[\\/]/).pop() || src;
+      const dst = joinPath(currentPath, name);
+      try {
+        if (clipboard.operation === "copy") {
+          await invoke("copy_entry", { src, dst });
+        } else {
+          await invoke("move_entry", { src, dst });
+        }
+      } catch (e) {
+        setError(`Impossible de coller ${name} : ${e}`);
+      }
+    }
+    if (clipboard.operation === "cut") {
+      setClipboard(null);
+    }
+    refresh();
+  }, [clipboard, currentPath, refresh]);
+
+  /* ---------- Menu contextuel ---------- */
+
+  const showContextMenu = useCallback(
+    (e: React.MouseEvent, entry?: FileEntry) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const x = e.clientX;
+      const y = e.clientY;
+
+      const items: ContextMenuItem[] = [];
+
+      if (entry) {
+        // Menu sur un fichier/dossier
+        if (entry.isDir) {
+          items.push({
+            label: "Ouvrir",
+            icon: Folder,
+            onClick: () => void openEntry(entry),
+          });
+        } else {
+          items.push({
+            label: "Ouvrir",
+            icon: FileText,
+            onClick: () => void openEntry(entry),
+          });
+        }
+        items.push({ label: "", separator: true });
+        items.push({
+          label: "Couper",
+          icon: Scissors,
+          onClick: () => {
+            setSelectedPaths(new Set([entry.path]));
+            setClipboard({ paths: [entry.path], operation: "cut" });
+          },
+        });
+        items.push({
+          label: "Copier",
+          icon: Copy,
+          onClick: () => {
+            setSelectedPaths(new Set([entry.path]));
+            setClipboard({ paths: [entry.path], operation: "copy" });
+          },
+        });
+        items.push({
+          label: "Renommer",
+          icon: Pencil,
+          onClick: () =>
+            setDialog({
+              type: "rename",
+              path: entry.path,
+              name: entry.name,
+            }),
+        });
+        items.push({
+          label: "Supprimer",
+          icon: Trash2,
+          danger: true,
+          onClick: () =>
+            setDialog({
+              type: "delete",
+              paths: [entry.path],
+              names: [entry.name],
+            }),
+        });
+        items.push({ label: "", separator: true });
+        items.push({
+          label: "Propriétés",
+          icon: Info,
+          onClick: () => setPropertiesPath(entry.path),
+        });
+      } else {
+        // Menu sur le fond
+        items.push({
+          label: "Nouveau dossier",
+          icon: FolderPlus,
+          onClick: () => setDialog({ type: "create-dir" }),
+        });
+        items.push({
+          label: "Nouveau fichier",
+          icon: FilePlus,
+          onClick: () => setDialog({ type: "create-file" }),
+        });
+        if (clipboard) {
+          items.push({ label: "", separator: true });
+          items.push({
+            label: "Coller",
+            icon: ClipboardPaste,
+            onClick: () => void pasteClipboard(),
+          });
+        }
+      }
+
+      setContextMenu({ x, y, items });
+    },
+    [openEntry, clipboard, pasteClipboard],
+  );
+
+  /* ---------- Raccourcis clavier ---------- */
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const inInput =
-        target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
 
+      // Raccourcis qui fonctionnent même dans les inputs
       if (e.key === "Backspace" && !inInput && history.length > 0) {
         e.preventDefault();
         void goBack();
@@ -267,38 +565,98 @@ function App() {
         e.preventDefault();
         void goUp();
       }
+
+      // Raccourcis hors inputs
+      if (inInput) return;
+
+      if (e.key === "Delete" && selectedPaths.size > 0) {
+        e.preventDefault();
+        const names = entries
+          .filter((en) => selectedPaths.has(en.path))
+          .map((en) => en.name);
+        setDialog({
+          type: "delete",
+          paths: [...selectedPaths],
+          names,
+        });
+      }
+      if (e.key === "F2" && selectedPaths.size === 1) {
+        e.preventDefault();
+        const entry = entries.find((en) => selectedPaths.has(en.path));
+        if (entry) {
+          setDialog({ type: "rename", path: entry.path, name: entry.name });
+        }
+      }
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === "c" && selectedPaths.size > 0) {
+          e.preventDefault();
+          copySelection();
+        }
+        if (e.key === "x" && selectedPaths.size > 0) {
+          e.preventDefault();
+          cutSelection();
+        }
+        if (e.key === "v" && clipboard) {
+          e.preventDefault();
+          void pasteClipboard();
+        }
+        if (e.key === "a") {
+          e.preventDefault();
+          selectAll();
+        }
+        if (e.shiftKey && e.key === "N") {
+          e.preventDefault();
+          setDialog({ type: "create-dir" });
+        }
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [goBack, goForward, goUp, history.length]);
+  }, [
+    goBack,
+    goForward,
+    goUp,
+    history.length,
+    selectedPaths,
+    entries,
+    clipboard,
+    copySelection,
+    cutSelection,
+    pasteClipboard,
+    selectAll,
+  ]);
+
+  const cutPaths = useMemo(() => {
+    if (!clipboard || clipboard.operation !== "cut") return new Set<string>();
+    return new Set(clipboard.paths);
+  }, [clipboard]);
 
   return (
-    <main className="app">
+    <main
+      className="app"
+      onClick={() => {
+        clearSelection();
+        setContextMenu(null);
+      }}
+    >
       <Sidebar
         homePath={homePath}
         specialDirs={specialDirs}
         drives={drives}
         currentPath={currentPath}
         onNavigate={(p) => void navigateTo(p)}
+        onOpenSettings={() => setShowSettings(true)}
+        onAnalyze={() => void analyzeStorage()}
+        analyzing={analyzing}
+        canAnalyze={!!currentPath}
       />
 
       <div className="main-area">
         <header className="app-header">
           <div className="brand">
-            <span className="brand-mark"><FolderTree size={20} /></span>
             <span className="brand-name">Noya Explorer</span>
           </div>
           <div className="header-actions">
-            {currentPath && (
-              <button
-                className="ghost-btn"
-                onClick={() => void analyzeStorage()}
-                disabled={analyzing}
-                title="Analyser le stockage du dossier courant"
-              >
-                {analyzing ? "Analyse…" : (<><BarChart3 size={14} /> Analyser le stockage</>)}
-              </button>
-            )}
             <button
               className="ghost-btn"
               onClick={() => void chooseFolder()}
@@ -355,6 +713,64 @@ function App() {
                 ✕
               </button>
             )}
+            <div className="toolbar-divider" />
+            <button
+              className="toolbar-action"
+              onClick={() => setDialog({ type: "create-dir" })}
+              title="Nouveau dossier (Ctrl+Shift+N)"
+            >
+              <FolderPlus size={14} /> Dossier
+            </button>
+            <button
+              className="toolbar-action"
+              onClick={() => setDialog({ type: "create-file" })}
+              title="Nouveau fichier"
+            >
+              <FilePlus size={14} /> Fichier
+            </button>
+            <button
+              className="toolbar-action"
+              onClick={copySelection}
+              disabled={selectedPaths.size === 0}
+              title="Copier (Ctrl+C)"
+            >
+              <Copy size={14} />
+            </button>
+            <button
+              className="toolbar-action"
+              onClick={cutSelection}
+              disabled={selectedPaths.size === 0}
+              title="Couper (Ctrl+X)"
+            >
+              <Scissors size={14} />
+            </button>
+            <button
+              className="toolbar-action"
+              onClick={() => void pasteClipboard()}
+              disabled={!clipboard}
+              title="Coller (Ctrl+V)"
+            >
+              <ClipboardPaste size={14} />
+            </button>
+            <button
+              className="toolbar-action danger"
+              onClick={() => {
+                if (selectedPaths.size > 0) {
+                  const names = entries
+                    .filter((en) => selectedPaths.has(en.path))
+                    .map((en) => en.name);
+                  setDialog({
+                    type: "delete",
+                    paths: [...selectedPaths],
+                    names,
+                  });
+                }
+              }}
+              disabled={selectedPaths.size === 0}
+              title="Supprimer (Suppr)"
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
         )}
 
@@ -362,7 +778,13 @@ function App() {
 
         {currentPath && (
           <div className="content">
-            <section className="file-list">
+            <section
+              className="file-list"
+              onContextMenu={(e) => showContextMenu(e)}
+              onClick={(e) => {
+                if (e.target === e.currentTarget) clearSelection();
+              }}
+            >
               <div className="list-header">
                 <span className="col-icon" />
                 <button
@@ -403,11 +825,15 @@ function App() {
                   const size = entry.isDir
                     ? folderSizes[entry.path]
                     : entry.size;
+                  const isSelected = selectedPaths.has(entry.path);
+                  const isCut = cutPaths.has(entry.path);
                   return (
                     <button
                       key={entry.path}
-                      className="file-row"
-                      onClick={() => void openEntry(entry)}
+                      className={`file-row ${isSelected ? "selected" : ""} ${isCut ? "cut" : ""}`}
+                      onClick={(e) => handleRowClick(e, entry)}
+                      onContextMenu={(e) => showContextMenu(e, entry)}
+                      onDoubleClick={() => void openEntry(entry)}
                       title={entry.path}
                     >
                       <span className="file-icon"><FileIcon category={info.category} /></span>
@@ -472,9 +898,74 @@ function App() {
             )}
           </div>
         )}
+
+        {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+        {propertiesPath && (
+          <PropertiesPanel
+            path={propertiesPath}
+            onClose={() => setPropertiesPath(null)}
+          />
+        )}
+        {contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            items={contextMenu.items}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
+        {dialog && (
+          <Dialog
+            title={
+              dialog.type === "create-dir"
+                ? "Nouveau dossier"
+                : dialog.type === "create-file"
+                  ? "Nouveau fichier"
+                  : dialog.type === "rename"
+                    ? "Renommer"
+                    : "Supprimer"
+            }
+            message={
+              dialog.type === "delete"
+                ? `Supprimer ${dialog.names.length === 1 ? `"${dialog.names[0]}"` : `${dialog.names.length} éléments`} ? Cette action est irréversible.`
+                : undefined
+            }
+            inputLabel={
+              dialog.type === "create-dir" || dialog.type === "create-file"
+                ? "Nom"
+                : dialog.type === "rename"
+                  ? "Nouveau nom"
+                  : undefined
+            }
+            inputValue={dialog.type === "rename" ? dialog.name : ""}
+            confirmLabel={
+              dialog.type === "create-dir"
+                ? "Créer"
+                : dialog.type === "create-file"
+                  ? "Créer"
+                  : dialog.type === "rename"
+                    ? "Renommer"
+                    : "Supprimer"
+            }
+            danger={dialog.type === "delete"}
+            onConfirm={(value) => {
+              if (dialog.type === "create-dir") void handleCreateDir(value!);
+              else if (dialog.type === "create-file") void handleCreateFile(value!);
+              else if (dialog.type === "rename") void handleRename(value!);
+              else if (dialog.type === "delete") void handleDelete();
+            }}
+            onClose={() => setDialog(null)}
+          />
+        )}
       </div>
     </main>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}

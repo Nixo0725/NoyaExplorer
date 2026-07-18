@@ -25,3 +25,8 @@ dist-ssr
 
 # Guide d'apprentissage (généré, pas versionné)
 teach
+
+# Fichiers de développement (pas versionnés)
+DEVELOPMENT_LOG.md
+plans/
+src-tauri/target/

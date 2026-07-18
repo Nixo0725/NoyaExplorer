@@ -45,6 +45,16 @@ export function toBreadcrumbs(path: string): BreadcrumbSegment[] {
   return segments;
 }
 
+/** Joins a directory path and a name into a full path. */
+export function joinPath(dir: string, name: string): string {
+  if (dir.endsWith("\\") || dir.endsWith("/")) {
+    return dir + name;
+  }
+  // Détecte le séparateur utilisé
+  const sep = dir.includes("\\") ? "\\" : "/";
+  return dir + sep + name;
+}
+
 /** Returns the parent directory of a path, or null if at the root. */
 export function parentPath(path: string): string | null {
   // Windows drive root: C:\

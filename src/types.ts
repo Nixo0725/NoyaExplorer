@@ -32,3 +32,67 @@ export interface StorageStats {
   fileCount: number;
   byCategory: CategoryStat[];
 }
+
+/* ---------- File management ---------- */
+
+export interface FileInfo {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+  created: number;
+  modified: number;
+  accessed: number;
+  readOnly: boolean;
+  extension: string;
+}
+
+export interface ClipboardState {
+  paths: string[];
+  operation: "copy" | "cut";
+}
+
+/* ---------- Theme system ---------- */
+
+/** Mode sélectionné par l'utilisateur. "auto" suit le système. */
+export type ThemeMode = "auto" | "light" | "dark";
+
+/** Thème effectivement appliqué (résolu depuis le mode + préférence système). */
+export type ResolvedTheme = "light" | "dark";
+
+export interface ThemeColors {
+  bg: string;
+  bgSecondary: string;
+  bgTertiary: string;
+  bgSelected: string;
+  text: string;
+  textSecondary: string;
+  textMuted: string;
+  accent: string;
+  accentHover: string;
+  accentSoft: string;
+  border: string;
+  borderStrong: string;
+  error: string;
+  errorBg: string;
+  success: string;
+  warning: string;
+  shadow: string;
+  radius: string;
+  /** Couleurs des icônes par catégorie de fichier */
+  catFolder: string;
+  catImage: string;
+  catVideo: string;
+  catAudio: string;
+  catDocument: string;
+  catArchive: string;
+  catCode: string;
+  catExecutable: string;
+  catOther: string;
+}
+
+export interface Theme {
+  id: ResolvedTheme;
+  name: string;
+  colors: ThemeColors;
+}
