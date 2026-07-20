@@ -96,3 +96,35 @@ export interface Theme {
   name: string;
   colors: ThemeColors;
 }
+
+/* ---------- Internationalisation ---------- */
+
+export type Language = "fr" | "en";
+
+/* ---------- Recherche ---------- */
+
+export interface SearchResult {
+  path: string;
+  name: string;
+  is_dir: boolean;
+  context: string | null;
+  score: number;
+}
+
+/* ---------- Favorites & access history ---------- */
+
+export interface FavoriteItem {
+  path: string;
+  name: string;
+  isDir: boolean;
+  addedAt: number;
+}
+
+export interface AccessRecord {
+  path: string;
+  name: string;
+  isDir: boolean;
+  accessCount: number;
+  lastAccessed: number;
+  modified: number;
+}

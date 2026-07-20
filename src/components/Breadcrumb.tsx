@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toBreadcrumbs } from "../lib/path";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface BreadcrumbProps {
   path: string;
@@ -7,6 +8,7 @@ interface BreadcrumbProps {
 }
 
 function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
+  const { t } = useLanguage();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(path);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -58,7 +60,7 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
     <div
       className="breadcrumb"
       onClick={() => setEditing(true)}
-      title="Cliquez pour saisir un chemin"
+      title={t("breadcrumb.hint")}
     >
       {segments.map((seg, i) => (
         <span key={seg.path} className="breadcrumb-segment">

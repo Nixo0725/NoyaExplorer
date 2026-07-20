@@ -1,32 +1,33 @@
 import type { FileCategory } from "./fileType";
+import type { TranslateFn } from "../i18n";
 
 const LABELS: Record<FileCategory, string> = {
-  folder: "Dossier",
-  image: "Image",
-  video: "Vidéo",
-  audio: "Audio",
-  document: "Document",
-  archive: "Archive",
-  code: "Code",
-  executable: "Exécutable",
-  other: "Autre",
+  folder: "cat.folder",
+  image: "cat.image",
+  video: "cat.video",
+  audio: "cat.audio",
+  document: "cat.document",
+  archive: "cat.archive",
+  code: "cat.code",
+  executable: "cat.executable",
+  other: "cat.other",
 };
 
-/** Returns a human-readable French label for a file category. */
-export function categoryLabel(category: FileCategory | string): string {
+/** Returns a human-readable label for a file category (translated). */
+export function categoryLabel(t: TranslateFn, category: FileCategory | string): string {
   if (category in LABELS) {
-    return LABELS[category as FileCategory];
+    return t(LABELS[category as FileCategory]);
   }
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
-/** Returns a readable type label for a single file entry. */
-export function typeLabel(name: string, isDir: boolean): string {
-  if (isDir) return "Dossier";
+/** Returns a readable type label for a single file entry (translated). */
+export function typeLabel(t: TranslateFn, name: string, isDir: boolean): string {
+  if (isDir) return t("cat.folder");
 
   const dotIndex = name.lastIndexOf(".");
-  if (dotIndex <= 0) return "Fichier";
+  if (dotIndex <= 0) return t("cat.file");
 
   const ext = name.slice(dotIndex + 1).toUpperCase();
-  return `Fichier ${ext}`;
+  return `${t("cat.file")} ${ext}`;
 }

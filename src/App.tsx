@@ -13,6 +13,12 @@ import {
   FileText,
   Pencil,
   Info,
+  FileEdit,
+  Search,
+  X,
+  ToggleLeft,
+  ToggleRight,
+  Star,
 } from "lucide-react";
 import "./App.css";
 import type {
@@ -23,28 +29,42 @@ import type {
   SpecialDir,
   DriveInfo,
   ClipboardState,
+  SearchResult,
+  FavoriteItem,
+  AccessRecord,
 } from "./types";
-import { formatSize, formatDate } from "./lib/format";
-import { getTypeInfo } from "./lib/fileType";
+import { formatSize } from "./lib/format";
 import { categoryLabel, typeLabel } from "./lib/category";
 import { parentPath, joinPath } from "./lib/path";
 import Sidebar from "./components/Sidebar";
 import Breadcrumb from "./components/Breadcrumb";
-import FileIcon from "./components/FileIcon";
+import FileList from "./components/FileList";
+import HomeView from "./components/HomeView";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
 import SettingsPanel from "./components/SettingsPanel";
 import ContextMenu, { type ContextMenuItem } from "./components/ContextMenu";
 import Dialog from "./components/Dialog";
 import PropertiesPanel from "./components/PropertiesPanel";
 
-const SORT_LABELS: Record<SortKey, string> = {
-  name: "Nom",
-  size: "Taille",
-  type: "Type",
-  modified: "Date",
-};
-
 const LAST_PATH_KEY = "noya:lastPath";
+
+/** Met en évidence les parties correspondantes d'un texte */
+function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  const lower = text.toLowerCase();
+  const qLower = query.toLowerCase();
+  const idx = lower.indexOf(qLower);
+  if (idx === -1) return text;
+
+  return (
+    <>
+      {text.slice(0, idx)}
+      <strong className="search-highlight">{text.slice(idx, idx + query.length)}</strong>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
 
 type DialogState =
   | { type: "create-dir" }
@@ -60,6 +80,7 @@ interface ContextMenuState {
 }
 
 function AppContent() {
+  const { t } = useLanguage();
   const [showSettings, setShowSettings] = useState(false);
   const [propertiesPath, setPropertiesPath] = useState<string | null>(null);
 
@@ -71,6 +92,9 @@ function AppContent() {
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
+  const [searchContent, setSearchContent] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
 
@@ -83,6 +107,14 @@ function AppContent() {
   const [homePath, setHomePath] = useState<string | null>(null);
   const [specialDirs, setSpecialDirs] = useState<SpecialDir[]>([]);
   const [drives, setDrives] = useState<DriveInfo[]>([]);
+
+  // Favoris & historique d'accès (persistance backend)
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [mostUsed, setMostUsed] = useState<AccessRecord[]>([]);
+  const [recentFiles, setRecentFiles] = useState<AccessRecord[]>([]);
+
+  // Vue Home active par défaut au démarrage
+  const [showHomeView, setShowHomeView] = useState(true);
 
   // Sélection multiple
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
@@ -103,7 +135,7 @@ function AppContent() {
         const home = await invoke<string>("home_dir");
         setHomePath(home);
       } catch (e) {
-        setError(`Impossible de trouver le dossier utilisateur : ${e}`);
+        setError(`${t("error.home_dir")} ${e}`);
       }
       try {
         const dirs = await invoke<SpecialDir[]>("special_dirs");
@@ -113,7 +145,60 @@ function AppContent() {
         const d = await invoke<DriveInfo[]>("list_drives");
         setDrives(d);
       } catch {}
+      // Favoris & historique d'accès
+      try {
+        const favs = await invoke<FavoriteItem[]>("list_favorites");
+        setFavorites(favs);
+      } catch {}
+      try {
+        const mu = await invoke<AccessRecord[]>("get_most_used", { limit: 4 });
+        setMostUsed(mu);
+      } catch {}
+      try {
+        const rf = await invoke<AccessRecord[]>("get_recent_files", { limit: 20 });
+        setRecentFiles(rf);
+      } catch {}
     })();
+  }, []);
+
+  /* ---------- Recherche intelligente (debounce) ---------- */
+
+  useEffect(() => {
+    if (!search.trim() || !currentPath) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await invoke<SearchResult[]>("search_files", {
+          rootPath: currentPath,
+          query: search.trim(),
+          searchContent,
+          maxResults: 50,
+        });
+        setSearchResults(results);
+      } catch (e) {
+        console.error("Search failed:", e);
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search, searchContent, currentPath]);
+
+  // Timer de debounce pour les mises à jour groupées de folderSizes.
+  const folderSizeFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Met à jour folderSizes de manière debouncée pour éviter les re-rendus en cascade. */
+  const scheduleFolderSizesFlush = useCallback(() => {
+    if (folderSizeFlushTimer.current) clearTimeout(folderSizeFlushTimer.current);
+    folderSizeFlushTimer.current = setTimeout(() => {
+      setFolderSizes({ ...folderSizesRef.current });
+    }, 80);
   }, []);
 
   const loadDirectory = useCallback(async (path: string) => {
@@ -131,19 +216,9 @@ function AppContent() {
 
       folderSizesRef.current = {};
       setFolderSizes({});
-
-      const folders = result.filter((e) => e.isDir);
-      for (const folder of folders) {
-        invoke<number>("folder_size", { path: folder.path })
-          .then((size) => {
-            folderSizesRef.current = {
-              ...folderSizesRef.current,
-              [folder.path]: size,
-            };
-            setFolderSizes({ ...folderSizesRef.current });
-          })
-          .catch(() => {});
-      }
+      computedFolderPaths.current = new Set();
+      // Les tailles de dossier sont calculées à la demande (lazy) via
+      // onVisibleEntriesChange — voir handleVisibleEntriesChange.
     } catch (e) {
       setError(String(e));
       setEntries([]);
@@ -152,23 +227,90 @@ function AppContent() {
     }
   }, []);
 
-  useEffect(() => {
-    if (currentPath !== null) return;
-    if (homePath === null) return;
-    const lastPath = localStorage.getItem(LAST_PATH_KEY);
-    void loadDirectory(lastPath || homePath);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homePath]);
+  // Au démarrage, on affiche la vue Home par défaut plutôt que de charger
+  // immédiatement le dernier dossier. L'utilisateur peut naviguer ensuite.
+
+  /** Set des chemins dont la taille est déjà calculée ou en cours de calcul. */
+  const computedFolderPaths = useRef<Set<string>>(new Set());
+
+  /**
+   * Calcul lazy des tailles de dossier : déclenché par FileList quand les
+   * entrées visibles changent. Seuls les dossiers visibles sans taille connue
+   * sont calculés, avec une limite de concurrence de 4.
+   */
+  const handleVisibleEntriesChange = useCallback(
+    (visible: FileEntry[]) => {
+      const foldersToCompute = visible.filter(
+        (e) =>
+          e.isDir &&
+          !computedFolderPaths.current.has(e.path) &&
+          !(e.path in folderSizesRef.current),
+      );
+      if (foldersToCompute.length === 0) return;
+
+      const MAX_CONCURRENT = 4;
+      let nextIndex = 0;
+
+      const processNext = (): void => {
+        if (nextIndex >= foldersToCompute.length) return;
+        const folder = foldersToCompute[nextIndex++];
+        computedFolderPaths.current.add(folder.path);
+        invoke<number>("folder_size", { path: folder.path, maxDepth: 10 })
+          .then((size) => {
+            folderSizesRef.current[folder.path] = size;
+            scheduleFolderSizesFlush();
+          })
+          .catch(() => {})
+          .finally(() => processNext());
+      };
+
+      for (let i = 0; i < Math.min(MAX_CONCURRENT, foldersToCompute.length); i++) {
+        processNext();
+      }
+    },
+    [scheduleFolderSizesFlush],
+  );
+
+  /** Rafraîchit les données de la vue Home depuis le backend. */
+  const refreshHomeData = useCallback(async () => {
+    try {
+      const mu = await invoke<AccessRecord[]>("get_most_used", { limit: 4 });
+      setMostUsed(mu);
+    } catch {}
+    try {
+      const rf = await invoke<AccessRecord[]>("get_recent_files", { limit: 20 });
+      setRecentFiles(rf);
+    } catch {}
+  }, []);
+
+  /** Enregistre un accès (pour le suivi de fréquence + récence). */
+  const recordAccess = useCallback(
+    async (entry: { path: string; name: string; isDir: boolean; modified: number }) => {
+      try {
+        await invoke("record_access", {
+          path: entry.path,
+          name: entry.name,
+          isDir: entry.isDir,
+          modified: entry.modified,
+        });
+      } catch {}
+    },
+    [],
+  );
 
   const navigateTo = useCallback(
     async (path: string) => {
+      setShowHomeView(false);
       if (currentPath) {
         setHistory((prev) => [...prev, currentPath]);
       }
       setForwardHistory([]);
       await loadDirectory(path);
+      // Tracking de l'accès au dossier
+      const name = path.split(/[\\/]/).pop() || path;
+      recordAccess({ path, name, isDir: true, modified: Date.now() });
     },
-    [currentPath, loadDirectory],
+    [currentPath, loadDirectory, recordAccess],
   );
 
   const goBack = useCallback(async () => {
@@ -212,12 +354,14 @@ function AppContent() {
       } else {
         try {
           await invoke("open_file", { path: entry.path });
+          recordAccess(entry);
+          refreshHomeData();
         } catch (e) {
-          setError(`Impossible d'ouvrir le fichier : ${e}`);
+          setError(`${t("error.open_file")} ${e}`);
         }
       }
     },
-    [navigateTo],
+    [navigateTo, recordAccess, refreshHomeData],
   );
 
   const chooseFolder = useCallback(async () => {
@@ -237,11 +381,92 @@ function AppContent() {
       });
       setStorageStats(stats);
     } catch (e) {
-      setError(`Analyse impossible : ${e}`);
+      setError(`${t("error.analyze")} ${e}`);
     } finally {
       setAnalyzing(false);
     }
   }, [currentPath]);
+
+  /* ---------- Favoris ---------- */
+
+  const isFavorite = useCallback(
+    (path: string) =>
+      favorites.some((f) => f.path.toLowerCase() === path.toLowerCase()),
+    [favorites],
+  );
+
+  const addFavorite = useCallback(
+    async (entry: { path: string; name: string; isDir: boolean }) => {
+      try {
+        const favs = await invoke<FavoriteItem[]>("add_favorite", {
+          path: entry.path,
+          name: entry.name,
+          isDir: entry.isDir,
+        });
+        setFavorites(favs);
+      } catch (e) {
+        setError(`${t("error.add_favorite")} ${e}`);
+      }
+    },
+    [t],
+  );
+
+  const removeFavorite = useCallback(
+    async (path: string) => {
+      try {
+        const favs = await invoke<FavoriteItem[]>("remove_favorite", { path });
+        setFavorites(favs);
+      } catch (e) {
+        setError(`${t("error.remove_favorite")} ${e}`);
+      }
+    },
+    [t],
+  );
+
+  /** Gestion du drag-and-drop depuis la liste de fichiers vers la sidebar. */
+  const handleDropToSidebar = useCallback(
+    async (path: string) => {
+      const name = path.split(/[\\/]/).pop() || path;
+      // On ne connaît pas isDir ici de façon fiable, on suppose un dossier si pas d'extension.
+      const isDir = !name.includes(".") || name.endsWith("/");
+      await addFavorite({ path, name, isDir });
+    },
+    [addFavorite],
+  );
+
+  /** Bascule un favori depuis la vue Home. */
+  const toggleFavoriteFromRecord = useCallback(
+    async (record: AccessRecord) => {
+      if (isFavorite(record.path)) {
+        await removeFavorite(record.path);
+      } else {
+        await addFavorite({
+          path: record.path,
+          name: record.name,
+          isDir: record.isDir,
+        });
+      }
+    },
+    [isFavorite, addFavorite, removeFavorite],
+  );
+
+  /** Ouvre un élément depuis la vue Home. */
+  const openFromHome = useCallback(
+    async (record: AccessRecord) => {
+      if (record.isDir) {
+        await navigateTo(record.path);
+      } else {
+        try {
+          await invoke("open_file", { path: record.path });
+          recordAccess(record);
+          refreshHomeData();
+        } catch (e) {
+          setError(`${t("error.open_file")} ${e}`);
+        }
+      }
+    },
+    [navigateTo, recordAccess, refreshHomeData, t],
+  );
 
   const toggleSort = useCallback((key: SortKey) => {
     setSortKey((currentKey) => {
@@ -253,6 +478,13 @@ function AppContent() {
       return key;
     });
   }, []);
+
+  // On n'inclut folderSizes dans les dépendances que si le tri actif est "size",
+  // pour éviter un re-tri complet (et un re-rendu) à chaque réponse folder_size
+  // quand l'utilisateur trie par nom/type/date.
+  const sortDependsOnFolderSizes = sortKey === "size";
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const folderSizesDep = sortDependsOnFolderSizes ? folderSizes : folderSizesRef.current;
 
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -270,14 +502,14 @@ function AppContent() {
           cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
           break;
         case "size": {
-          const aSize = a.isDir ? folderSizes[a.path] ?? 0 : a.size;
-          const bSize = b.isDir ? folderSizes[b.path] ?? 0 : b.size;
+          const aSize = a.isDir ? folderSizesDep[a.path] ?? 0 : a.size;
+          const bSize = b.isDir ? folderSizesDep[b.path] ?? 0 : b.size;
           cmp = aSize - bSize;
           break;
         }
         case "type":
-          cmp = typeLabel(a.name, a.isDir).localeCompare(
-            typeLabel(b.name, b.isDir),
+          cmp = typeLabel(t, a.name, a.isDir).localeCompare(
+            typeLabel(t, b.name, b.isDir),
           );
           break;
         case "modified":
@@ -291,7 +523,7 @@ function AppContent() {
     });
 
     return sorted;
-  }, [entries, search, sortKey, sortDir, folderSizes]);
+  }, [entries, search, sortKey, sortDir, folderSizesDep, t]);
 
   /* ---------- Sélection ---------- */
 
@@ -351,13 +583,17 @@ function AppContent() {
 
   const handleCreateDir = useCallback(
     async (name: string) => {
-      if (!currentPath) return;
+      if (!currentPath) {
+        setDialog(null);
+        setError(t("error.no_current_path"));
+        return;
+      }
       try {
         await invoke("create_dir", { path: joinPath(currentPath, name) });
         setDialog(null);
         refresh();
       } catch (e) {
-        setError(`Impossible de créer le dossier : ${e}`);
+        setError(`${t("error.create_dir")} ${e}`);
       }
     },
     [currentPath, refresh],
@@ -365,13 +601,17 @@ function AppContent() {
 
   const handleCreateFile = useCallback(
     async (name: string) => {
-      if (!currentPath) return;
+      if (!currentPath) {
+        setDialog(null);
+        setError(t("error.no_current_path"));
+        return;
+      }
       try {
         await invoke("create_file", { path: joinPath(currentPath, name) });
         setDialog(null);
         refresh();
       } catch (e) {
-        setError(`Impossible de créer le fichier : ${e}`);
+        setError(`${t("error.create_file")} ${e}`);
       }
     },
     [currentPath, refresh],
@@ -389,7 +629,7 @@ function AppContent() {
         setDialog(null);
         refresh();
       } catch (e) {
-        setError(`Impossible de renommer : ${e}`);
+        setError(`${t("error.rename")} ${e}`);
       }
     },
     [dialog, refresh],
@@ -401,7 +641,7 @@ function AppContent() {
       try {
         await invoke("delete_entry", { path: p });
       } catch (e) {
-        setError(`Impossible de supprimer ${p} : ${e}`);
+        setError(`${t("error.delete")} ${p} : ${e}`);
       }
     }
     setDialog(null);
@@ -433,7 +673,7 @@ function AppContent() {
           await invoke("move_entry", { src, dst });
         }
       } catch (e) {
-        setError(`Impossible de coller ${name} : ${e}`);
+        setError(`${t("error.paste")} ${name} : ${e}`);
       }
     }
     if (clipboard.operation === "cut") {
@@ -457,20 +697,25 @@ function AppContent() {
         // Menu sur un fichier/dossier
         if (entry.isDir) {
           items.push({
-            label: "Ouvrir",
+            label: t("context.open"),
             icon: Folder,
             onClick: () => void openEntry(entry),
           });
         } else {
           items.push({
-            label: "Ouvrir",
+            label: t("context.open"),
             icon: FileText,
             onClick: () => void openEntry(entry),
+          });
+          items.push({
+            label: t("context.edit"),
+            icon: FileEdit,
+            onClick: () => void invoke("edit_file", { path: entry.path }),
           });
         }
         items.push({ label: "", separator: true });
         items.push({
-          label: "Couper",
+          label: t("context.cut"),
           icon: Scissors,
           onClick: () => {
             setSelectedPaths(new Set([entry.path]));
@@ -478,7 +723,7 @@ function AppContent() {
           },
         });
         items.push({
-          label: "Copier",
+          label: t("context.copy"),
           icon: Copy,
           onClick: () => {
             setSelectedPaths(new Set([entry.path]));
@@ -486,7 +731,7 @@ function AppContent() {
           },
         });
         items.push({
-          label: "Renommer",
+          label: t("context.rename"),
           icon: Pencil,
           onClick: () =>
             setDialog({
@@ -496,7 +741,7 @@ function AppContent() {
             }),
         });
         items.push({
-          label: "Supprimer",
+          label: t("context.delete"),
           icon: Trash2,
           danger: true,
           onClick: () =>
@@ -508,26 +753,26 @@ function AppContent() {
         });
         items.push({ label: "", separator: true });
         items.push({
-          label: "Propriétés",
+          label: t("context.properties"),
           icon: Info,
           onClick: () => setPropertiesPath(entry.path),
         });
       } else {
         // Menu sur le fond
         items.push({
-          label: "Nouveau dossier",
+          label: t("context.new_folder"),
           icon: FolderPlus,
           onClick: () => setDialog({ type: "create-dir" }),
         });
         items.push({
-          label: "Nouveau fichier",
+          label: t("context.new_file"),
           icon: FilePlus,
           onClick: () => setDialog({ type: "create-file" }),
         });
         if (clipboard) {
           items.push({ label: "", separator: true });
           items.push({
-            label: "Coller",
+            label: t("context.paste"),
             icon: ClipboardPaste,
             onClick: () => void pasteClipboard(),
           });
@@ -643,12 +888,22 @@ function AppContent() {
         homePath={homePath}
         specialDirs={specialDirs}
         drives={drives}
+        favorites={favorites}
         currentPath={currentPath}
+        isHomeView={showHomeView}
         onNavigate={(p) => void navigateTo(p)}
+        onOpenHome={() => {
+          setShowHomeView(true);
+          setCurrentPath(null);
+          setEntries([]);
+          void refreshHomeData();
+        }}
         onOpenSettings={() => setShowSettings(true)}
         onAnalyze={() => void analyzeStorage()}
         analyzing={analyzing}
         canAnalyze={!!currentPath}
+        onRemoveFavorite={(p) => void removeFavorite(p)}
+        onDropToSidebar={(p) => void handleDropToSidebar(p)}
       />
 
       <div className="main-area">
@@ -660,20 +915,33 @@ function AppContent() {
             <button
               className="ghost-btn"
               onClick={() => void chooseFolder()}
-              title="Ouvrir un autre dossier"
+              title={t("app.open_folder")}
             >
-              <><FolderOpen size={14} /> Ouvrir…</>
+              <><FolderOpen size={14} /> {t("app.open_folder_btn")}</>
             </button>
           </div>
         </header>
 
-        {currentPath && (
+        {showHomeView && (
+          <div className="content home-content">
+            <HomeView
+              mostUsed={mostUsed}
+              recentFiles={recentFiles}
+              favorites={favorites}
+              onOpen={(r) => void openFromHome(r)}
+              onToggleFavorite={(r) => void toggleFavoriteFromRecord(r)}
+              isFavorite={isFavorite}
+            />
+          </div>
+        )}
+
+        {currentPath && !showHomeView && (
           <div className="toolbar">
             <button
               className="icon-btn"
               onClick={() => void goBack()}
               disabled={history.length === 0}
-              title="Précédent (Alt+←)"
+              title={t("app.back")}
             >
               ←
             </button>
@@ -681,7 +949,7 @@ function AppContent() {
               className="icon-btn"
               onClick={() => void goForward()}
               disabled={forwardHistory.length === 0}
-              title="Suivant (Alt+→)"
+              title={t("app.forward")}
             >
               →
             </button>
@@ -689,7 +957,7 @@ function AppContent() {
               className="icon-btn"
               onClick={() => void goUp()}
               disabled={!parentPath(currentPath)}
-              title="Dossier parent (Alt+↑)"
+              title={t("app.up")}
             >
               ↑
             </button>
@@ -697,42 +965,97 @@ function AppContent() {
               path={currentPath}
               onNavigate={(p) => void navigateTo(p)}
             />
-            <input
-              className="search-input"
-              type="text"
-              placeholder="Rechercher…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && (
+            <div className="search-container">
+              <Search size={14} className="search-icon" />
+              <input
+                className="search-input"
+                type="text"
+                placeholder={t("app.search")}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
               <button
-                className="icon-btn"
-                onClick={() => setSearch("")}
-                title="Effacer la recherche"
+                className={`search-toggle-btn ${searchContent ? "active" : ""}`}
+                onClick={() => setSearchContent(!searchContent)}
+                title={searchContent ? t("search.by_content_on") : t("search.by_content_off")}
               >
-                ✕
+                {searchContent ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
               </button>
-            )}
+              {search && (
+                <button
+                  className="icon-btn"
+                  onClick={() => {
+                    setSearch("");
+                    setSearchResults([]);
+                  }}
+                  title={t("app.clear_search")}
+                >
+                  <X size={14} />
+                </button>
+              )}
+
+              {/* Résultats de recherche */}
+              {search && searchResults.length > 0 && (
+                <div className="search-results">
+                  {searching && <div className="search-status">{t("app.searching")}</div>}
+                  {searchResults.map((r) => (
+                    <button
+                      key={r.path}
+                      className="search-result-item"
+                      onClick={() => {
+                        const parent = parentPath(r.path);
+                        if (parent) void navigateTo(r.path);
+                        else if (!r.is_dir) {
+                          const p = parentPath(r.path);
+                          if (p) void navigateTo(p);
+                        }
+                        setSearch("");
+                        setSearchResults([]);
+                      }}
+                      onDoubleClick={() => {
+                        if (!r.is_dir) void invoke("open_file", { path: r.path });
+                      }}
+                    >
+                      <span className="search-result-icon">
+                        {r.is_dir ? <FolderOpen size={14} /> : <FileText size={14} />}
+                      </span>
+                      <div className="search-result-info">
+                        <span className="search-result-name">{highlightMatch(r.name, search)}</span>
+                        <span className="search-result-path">{r.path}</span>
+                        {r.context && (
+                          <span className="search-result-context">{r.context}</span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {search && !searching && searchResults.length === 0 && (
+                <div className="search-results">
+                  <div className="search-status">{t("app.no_results")}</div>
+                </div>
+              )}
+            </div>
             <div className="toolbar-divider" />
             <button
               className="toolbar-action"
               onClick={() => setDialog({ type: "create-dir" })}
-              title="Nouveau dossier (Ctrl+Shift+N)"
+              title={t("app.new_folder_title")}
             >
-              <FolderPlus size={14} /> Dossier
+              <FolderPlus size={14} /> {t("app.new_folder")}
             </button>
             <button
               className="toolbar-action"
               onClick={() => setDialog({ type: "create-file" })}
-              title="Nouveau fichier"
+              title={t("app.new_file_title")}
             >
-              <FilePlus size={14} /> Fichier
+              <FilePlus size={14} /> {t("app.new_file")}
             </button>
             <button
               className="toolbar-action"
               onClick={copySelection}
               disabled={selectedPaths.size === 0}
-              title="Copier (Ctrl+C)"
+              title={t("app.copy_title")}
             >
               <Copy size={14} />
             </button>
@@ -740,7 +1063,7 @@ function AppContent() {
               className="toolbar-action"
               onClick={cutSelection}
               disabled={selectedPaths.size === 0}
-              title="Couper (Ctrl+X)"
+              title={t("app.cut_title")}
             >
               <Scissors size={14} />
             </button>
@@ -748,9 +1071,20 @@ function AppContent() {
               className="toolbar-action"
               onClick={() => void pasteClipboard()}
               disabled={!clipboard}
-              title="Coller (Ctrl+V)"
+              title={t("app.paste_title")}
             >
               <ClipboardPaste size={14} />
+            </button>
+            <button
+              className="toolbar-action"
+              onClick={() => {
+                const entry = entries.find(e => selectedPaths.has(e.path));
+                if (entry && !entry.isDir) void invoke("edit_file", { path: entry.path });
+              }}
+              disabled={selectedPaths.size !== 1 || !entries.find(e => selectedPaths.has(e.path))?.isDir === false}
+              title={t("app.edit_title")}
+            >
+              <FileEdit size={14} />
             </button>
             <button
               className="toolbar-action danger"
@@ -767,7 +1101,7 @@ function AppContent() {
                 }
               }}
               disabled={selectedPaths.size === 0}
-              title="Supprimer (Suppr)"
+              title={t("app.delete_title")}
             >
               <Trash2 size={14} />
             </button>
@@ -776,100 +1110,63 @@ function AppContent() {
 
         {error && <div className="error">{error}</div>}
 
-        {currentPath && (
+        {currentPath && !showHomeView && (
           <div className="content">
-            <section
-              className="file-list"
-              onContextMenu={(e) => showContextMenu(e)}
-              onClick={(e) => {
+            <FileList
+              entries={visibleEntries}
+              folderSizes={folderSizes}
+              selectedPaths={selectedPaths}
+              cutPaths={cutPaths}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              loading={loading}
+              search={search}
+              onToggleSort={toggleSort}
+              onRowClick={handleRowClick}
+              onRowContextMenu={showContextMenu}
+              onRowDoubleClick={(entry) => void openEntry(entry)}
+              onBackgroundContextMenu={showContextMenu}
+              onBackgroundClick={(e) => {
                 if (e.target === e.currentTarget) clearSelection();
               }}
-            >
-              <div className="list-header">
-                <span className="col-icon" />
-                <button
-                  className={`col-header ${sortKey === "name" ? `active ${sortDir}` : ""}`}
-                  onClick={() => toggleSort("name")}
-                >
-                  {SORT_LABELS.name}
-                </button>
-                <button
-                  className={`col-header col-size ${sortKey === "size" ? `active ${sortDir}` : ""}`}
-                  onClick={() => toggleSort("size")}
-                >
-                  {SORT_LABELS.size}
-                </button>
-                <button
-                  className={`col-header col-type ${sortKey === "type" ? `active ${sortDir}` : ""}`}
-                  onClick={() => toggleSort("type")}
-                >
-                  {SORT_LABELS.type}
-                </button>
-                <button
-                  className={`col-header col-date ${sortKey === "modified" ? `active ${sortDir}` : ""}`}
-                  onClick={() => toggleSort("modified")}
-                >
-                  {SORT_LABELS.modified}
-                </button>
-              </div>
-
-              {loading && <div className="status">Chargement…</div>}
-              {!loading && visibleEntries.length === 0 && (
-                <div className="status">
-                  {search ? "Aucun résultat." : "Ce dossier est vide."}
-                </div>
-              )}
-              {!loading &&
-                visibleEntries.map((entry) => {
-                  const info = getTypeInfo(entry.name, entry.isDir);
-                  const size = entry.isDir
-                    ? folderSizes[entry.path]
-                    : entry.size;
-                  const isSelected = selectedPaths.has(entry.path);
-                  const isCut = cutPaths.has(entry.path);
-                  return (
-                    <button
-                      key={entry.path}
-                      className={`file-row ${isSelected ? "selected" : ""} ${isCut ? "cut" : ""}`}
-                      onClick={(e) => handleRowClick(e, entry)}
-                      onContextMenu={(e) => showContextMenu(e, entry)}
-                      onDoubleClick={() => void openEntry(entry)}
-                      title={entry.path}
-                    >
-                      <span className="file-icon"><FileIcon category={info.category} /></span>
-                      <span className="file-name">{entry.name}</span>
-                      <span className="file-size">
-                        {entry.isDir
-                          ? size !== undefined
-                            ? formatSize(size)
-                            : "…"
-                          : formatSize(entry.size)}
-                      </span>
-                      <span className="file-type">
-                        {typeLabel(entry.name, entry.isDir)}
-                      </span>
-                      <span className="file-date">
-                        {formatDate(entry.modified)}
-                      </span>
-                    </button>
-                  );
-                })}
-            </section>
+              onVisibleEntriesChange={handleVisibleEntriesChange}
+              rowAction={(entry) => {
+                const pinned = isFavorite(entry.path);
+                return (
+                  <button
+                    className="row-pin-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (pinned) void removeFavorite(entry.path);
+                      else
+                        void addFavorite({
+                          path: entry.path,
+                          name: entry.name,
+                          isDir: entry.isDir,
+                        });
+                    }}
+                    title={pinned ? t("home.unpin") : t("home.pin")}
+                  >
+                    <Star size={13} fill={pinned ? "currentColor" : "none"} />
+                  </button>
+                );
+              }}
+            />
 
             {storageStats && (
               <aside className="storage-panel">
-                <h2>Aperçu du stockage</h2>
+                <h2>{t("storage.title")}</h2>
                 <div className="storage-total">
-                  <span className="label">Total</span>
+                  <span className="label">{t("storage.total")}</span>
                   <strong>{formatSize(storageStats.totalSize)}</strong>
                 </div>
                 <div className="storage-total">
-                  <span className="label">Fichiers</span>
+                  <span className="label">{t("storage.files")}</span>
                   <strong>{storageStats.fileCount.toLocaleString()}</strong>
                 </div>
-                <h3>Répartition par catégorie</h3>
+                <h3>{t("storage.by_category")}</h3>
                 {storageStats.byCategory.length === 0 && (
-                  <p className="muted">Aucun fichier dans ce dossier.</p>
+                  <p className="muted">{t("storage.empty")}</p>
                 )}
                 {storageStats.byCategory.map((cat) => {
                   const percent =
@@ -879,10 +1176,10 @@ function AppContent() {
                   return (
                     <div key={cat.category} className="storage-bar">
                       <div className="storage-bar-label">
-                        <span>{categoryLabel(cat.category)}</span>
+                        <span>{categoryLabel(t, cat.category)}</span>
                         <span className="muted">
                           {formatSize(cat.size)} · {cat.count.toLocaleString()}{" "}
-                          fichier{cat.count > 1 ? "s" : ""}
+                          {t("storage.files").toLowerCase()}{cat.count > 1 ? "s" : ""}
                         </span>
                       </div>
                       <div className="bar-track">
@@ -918,34 +1215,37 @@ function AppContent() {
           <Dialog
             title={
               dialog.type === "create-dir"
-                ? "Nouveau dossier"
+                ? t("dialog.new_folder_title")
                 : dialog.type === "create-file"
-                  ? "Nouveau fichier"
+                  ? t("dialog.new_file_title")
                   : dialog.type === "rename"
-                    ? "Renommer"
-                    : "Supprimer"
+                    ? t("dialog.rename_title")
+                    : t("dialog.delete_title")
             }
             message={
               dialog.type === "delete"
-                ? `Supprimer ${dialog.names.length === 1 ? `"${dialog.names[0]}"` : `${dialog.names.length} éléments`} ? Cette action est irréversible.`
+                ? dialog.names.length === 1
+                  ? t("dialog.delete_message_single", { name: dialog.names[0] })
+                  : t("dialog.delete_message_multiple", { count: String(dialog.names.length) })
                 : undefined
             }
             inputLabel={
               dialog.type === "create-dir" || dialog.type === "create-file"
-                ? "Nom"
+                ? t("dialog.name_label")
                 : dialog.type === "rename"
-                  ? "Nouveau nom"
+                  ? t("dialog.new_name_label")
                   : undefined
             }
             inputValue={dialog.type === "rename" ? dialog.name : ""}
+            cancelLabel={t("dialog.cancel")}
             confirmLabel={
               dialog.type === "create-dir"
-                ? "Créer"
+                ? t("dialog.create_btn")
                 : dialog.type === "create-file"
-                  ? "Créer"
+                  ? t("dialog.create_btn")
                   : dialog.type === "rename"
-                    ? "Renommer"
-                    : "Supprimer"
+                    ? t("dialog.rename_btn")
+                    : t("dialog.delete_btn")
             }
             danger={dialog.type === "delete"}
             onConfirm={(value) => {
@@ -965,7 +1265,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <LanguageProvider>
+        <AppContent />
+      </LanguageProvider>
     </ThemeProvider>
   );
 }

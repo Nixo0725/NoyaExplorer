@@ -1,5 +1,6 @@
-import { X, Monitor, Sun, Moon, type LucideIcon } from "lucide-react";
+import { X, Monitor, Sun, Moon, Languages, type LucideIcon } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import type { ThemeMode } from "../types";
 
 interface SettingsPanelProps {
@@ -8,39 +9,40 @@ interface SettingsPanelProps {
 
 interface ModeOption {
   mode: ThemeMode;
-  label: string;
+  labelKey: string;
   icon: LucideIcon;
 }
 
-const MODE_OPTIONS: ModeOption[] = [
-  { mode: "auto", label: "Auto", icon: Monitor },
-  { mode: "light", label: "Clair", icon: Sun },
-  { mode: "dark", label: "Sombre", icon: Moon },
-];
-
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { mode, setMode } = useTheme();
+  const { lang, setLang, t } = useLanguage();
+
+  const MODE_OPTIONS: ModeOption[] = [
+    { mode: "auto", labelKey: "settings.theme_auto", icon: Monitor },
+    { mode: "light", labelKey: "settings.theme_light", icon: Sun },
+    { mode: "dark", labelKey: "settings.theme_dark", icon: Moon },
+  ];
 
   return (
     <aside className="settings-panel">
       <div className="settings-header">
-        <h2>Paramètres</h2>
-        <button className="icon-btn" onClick={onClose} title="Fermer">
+        <h2>{t("settings.title")}</h2>
+        <button className="icon-btn" onClick={onClose} title={t("settings.close")}>
           <X size={16} />
         </button>
       </div>
 
       <section className="settings-section">
-        <h3 className="settings-section-title">Apparence</h3>
+        <h3 className="settings-section-title">{t("settings.appearance")}</h3>
         <p className="settings-section-desc">
-          Choisis le mode d'affichage. Le mode Auto suit la préférence de ton
-          système (clair ou sombre).
+          {t("settings.appearance_desc")}
         </p>
 
-        <div className="theme-switcher" role="radiogroup" aria-label="Mode d'affichage">
+        <div className="theme-switcher" role="radiogroup" aria-label={t("settings.appearance")}>
           {MODE_OPTIONS.map((opt) => {
             const Icon = opt.icon;
             const active = opt.mode === mode;
+            const label = t(opt.labelKey);
             return (
               <button
                 key={opt.mode}
@@ -48,15 +50,45 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                 aria-checked={active}
                 className={`theme-option ${active ? "active" : ""}`}
                 onClick={() => setMode(opt.mode)}
-                title={opt.label}
+                title={label}
               >
                 <span className="theme-option-icon">
                   <Icon size={14} />
                 </span>
-                {opt.label}
+                {label}
               </button>
             );
           })}
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="settings-section-title">{t("settings.language")}</h3>
+        <p className="settings-section-desc">
+          {t("settings.mode_english_desc")}
+        </p>
+
+        <div className="language-switcher">
+          <button
+            className={`theme-option ${lang === "fr" ? "active" : ""}`}
+            onClick={() => setLang("fr")}
+            title="Français"
+          >
+            <span className="theme-option-icon">
+              <Languages size={14} />
+            </span>
+            Français
+          </button>
+          <button
+            className={`theme-option ${lang === "en" ? "active" : ""}`}
+            onClick={() => setLang("en")}
+            title="English"
+          >
+            <span className="theme-option-icon">
+              <Languages size={14} />
+            </span>
+            English
+          </button>
         </div>
       </section>
     </aside>
