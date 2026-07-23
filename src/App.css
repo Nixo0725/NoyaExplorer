@@ -478,7 +478,7 @@ body {
 .list-header,
 .file-row {
   display: grid;
-  grid-template-columns: 28px minmax(120px, 1fr) 100px 140px 140px;
+  grid-template-columns: 28px minmax(120px, 1fr) 100px 140px 140px 36px;
   align-items: center;
   gap: 12px;
   padding: 6px 10px;
@@ -1355,4 +1355,272 @@ body {
 
 .home-recent-pin:hover {
   color: var(--accent);
+}
+
+/* ---------- Espaces personnalisés ---------- */
+
+.space-view {
+  padding: 24px 32px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.space-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.space-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.space-description {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ---------- Cleanup tabs ---------- */
+
+.cleanup-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 3px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.cleanup-tab {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+
+.cleanup-tab:hover:not(.active) {
+  color: var(--text);
+}
+
+.cleanup-tab.active {
+  background: var(--bg);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.cleanup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cleanup-table-header {
+  display: grid;
+  grid-template-columns: 1fr 120px 140px 40px;
+  gap: 12px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-strong);
+  margin-bottom: 4px;
+}
+
+.cleanup-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 140px 40px;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  transition: background var(--transition);
+}
+
+.cleanup-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.cleanup-col-name {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.cleanup-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cleanup-col-size,
+.cleanup-col-date {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cleanup-col-action {
+  display: flex;
+  justify-content: center;
+}
+
+/* Duplicates */
+.duplicate-group {
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.duplicate-group-header {
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.duplicate-file-row {
+  padding-left: 24px;
+}
+
+.duplicate-file-row .cleanup-col-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+/* Suspicious file cards */
+.suspicious-file-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+}
+
+.suspicious-file-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.suspicious-file-path {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suspicious-issue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.suspicious-severity {
+  font-size: 11px;
+}
+
+.suspicious-issue-desc {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* ---------- Filtres avancés ---------- */
+
+.filters-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 300px;
+  height: 100vh;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-strong);
+  z-index: 100;
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+
+.filters-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filter-input,
+.filter-select {
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.filter-input:focus,
+.filter-select:focus {
+  border-color: var(--accent);
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
