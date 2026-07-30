@@ -32,6 +32,9 @@ import type {
   SearchResult,
   FavoriteItem,
   AccessRecord,
+  Space,
+  AppView,
+  SearchFilters as SearchFiltersType,
 } from "./types";
 import { formatSize } from "./lib/format";
 import { categoryLabel, typeLabel } from "./lib/category";
@@ -41,13 +44,24 @@ import Breadcrumb from "./components/Breadcrumb";
 import FileList from "./components/FileList";
 import HomeView from "./components/HomeView";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { DragDropProvider } from "./components/DragDropProvider";
+import DragPreview from "./components/DragPreview";
 import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
 import SettingsPanel from "./components/SettingsPanel";
 import ContextMenu, { type ContextMenuItem } from "./components/ContextMenu";
 import Dialog from "./components/Dialog";
 import PropertiesPanel from "./components/PropertiesPanel";
+import SpacesView from "./components/SpacesView";
+import SpaceManager from "./components/SpaceManager";
+import BiggestFilesView from "./components/BiggestFilesView";
+import BiggestFoldersView from "./components/BiggestFoldersView";
+import InsightsView from "./components/InsightsView";
+import SearchFilters from "./components/SearchFilters";
 
 const LAST_PATH_KEY = "noya:lastPath";
+
+/** Ref module-level pour connecter le callback de drop d'AppContent vers DragDropProvider */
+const _appDropHandler = { current: null as ((items: string[], targetEl: Element) => void) | null };
 
 /** Met en évidence les parties correspondantes d'un texte */
 function highlightMatch(text: string, query: string): React.ReactNode {
@@ -93,6 +107,7 @@ function AppContent() {
 
   const [search, setSearch] = useState("");
   const [searchContent, setSearchContent] = useState(false);
+  const [searchFilters, setSearchFilters] = useState<SearchFiltersType>({});
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -113,8 +128,14 @@ function AppContent() {
   const [mostUsed, setMostUsed] = useState<AccessRecord[]>([]);
   const [recentFiles, setRecentFiles] = useState<AccessRecord[]>([]);
 
-  // Vue Home active par défaut au démarrage
-  const [showHomeView, setShowHomeView] = useState(true);
+  // Routing de vues
+  const [currentView, setCurrentView] = useState<AppView>("home");
+
+  // Spaces
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [currentSpaceId, setCurrentSpaceId] = useState<string | null>(null);
+  const [spaceManagerOpen, setSpaceManagerOpen] = useState(false);
+  const [editingSpace, setEditingSpace] = useState<Space | null>(null);
 
   // Sélection multiple
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
@@ -128,6 +149,14 @@ function AppContent() {
 
   // Dialogs
   const [dialog, setDialog] = useState<DialogState>(null);
+
+  /** Charge les spaces depuis le backend */
+  const loadSpaces = useCallback(async () => {
+    try {
+      const s = await invoke<Space[]>("list_spaces");
+      setSpaces(s);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -158,6 +187,8 @@ function AppContent() {
         const rf = await invoke<AccessRecord[]>("get_recent_files", { limit: 20 });
         setRecentFiles(rf);
       } catch {}
+      // Spaces
+      await loadSpaces();
     })();
   }, []);
 
@@ -172,13 +203,38 @@ function AppContent() {
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const results = await invoke<SearchResult[]>("search_files", {
-          rootPath: currentPath,
-          query: search.trim(),
-          searchContent,
-          maxResults: 50,
-        });
-        setSearchResults(results);
+        // Use advanced search if filters are active, otherwise basic search
+        const hasFilters =
+          searchFilters.extensions ||
+          searchFilters.category ||
+          searchFilters.minSize !== undefined ||
+          searchFilters.maxSize !== undefined ||
+          searchFilters.modifiedBefore ||
+          searchFilters.modifiedAfter ||
+          searchFilters.createdBefore ||
+          searchFilters.createdAfter ||
+          searchFilters.recentOnly ||
+          searchFilters.oldOnly ||
+          searchFilters.largeOnly;
+
+        if (hasFilters) {
+          const results = await invoke<SearchResult[]>("search_files_advanced", {
+            rootPath: currentPath,
+            query: search.trim(),
+            filters: searchFilters,
+            searchContent,
+            maxResults: 50,
+          });
+          setSearchResults(results);
+        } else {
+          const results = await invoke<SearchResult[]>("search_files", {
+            rootPath: currentPath,
+            query: search.trim(),
+            searchContent,
+            maxResults: 50,
+          });
+          setSearchResults(results);
+        }
       } catch (e) {
         console.error("Search failed:", e);
         setSearchResults([]);
@@ -188,7 +244,7 @@ function AppContent() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [search, searchContent, currentPath]);
+  }, [search, searchContent, searchFilters, currentPath]);
 
   // Timer de debounce pour les mises à jour groupées de folderSizes.
   const folderSizeFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -217,8 +273,6 @@ function AppContent() {
       folderSizesRef.current = {};
       setFolderSizes({});
       computedFolderPaths.current = new Set();
-      // Les tailles de dossier sont calculées à la demande (lazy) via
-      // onVisibleEntriesChange — voir handleVisibleEntriesChange.
     } catch (e) {
       setError(String(e));
       setEntries([]);
@@ -298,19 +352,41 @@ function AppContent() {
     [],
   );
 
+  /** Navigation vers un dossier dans la vue fichiers */
   const navigateTo = useCallback(
     async (path: string) => {
-      setShowHomeView(false);
+      setCurrentView("files");
+      setCurrentSpaceId(null);
       if (currentPath) {
         setHistory((prev) => [...prev, currentPath]);
       }
       setForwardHistory([]);
       await loadDirectory(path);
-      // Tracking de l'accès au dossier
       const name = path.split(/[\\/]/).pop() || path;
       recordAccess({ path, name, isDir: true, modified: Date.now() });
     },
     [currentPath, loadDirectory, recordAccess],
+  );
+
+  /** Navigation vers une vue d'analyse */
+  const navigateView = useCallback(
+    (view: AppView) => {
+      setCurrentView(view);
+      setCurrentSpaceId(null);
+      setSearch("");
+      setSearchResults([]);
+      setStorageStats(null);
+    },
+    [],
+  );
+
+  /** Ouvre un space */
+  const openSpace = useCallback(
+    (id: string) => {
+      setCurrentView("space");
+      setCurrentSpaceId(id);
+    },
+    [],
   );
 
   const goBack = useCallback(async () => {
@@ -427,12 +503,52 @@ function AppContent() {
   const handleDropToSidebar = useCallback(
     async (path: string) => {
       const name = path.split(/[\\/]/).pop() || path;
-      // On ne connaît pas isDir ici de façon fiable, on suppose un dossier si pas d'extension.
       const isDir = !name.includes(".") || name.endsWith("/");
       await addFavorite({ path, name, isDir });
     },
     [addFavorite],
   );
+
+  /** Drop d'un dossier vers un Space */
+  const handleDropToSpace = useCallback(
+    async (spaceId: string, folder: string) => {
+      try {
+        const updated = await invoke<Space[]>("add_folder_to_space", {
+          id: spaceId,
+          folder,
+        });
+        setSpaces(updated);
+      } catch (e) {
+        setError(`Impossible d'ajouter le dossier : ${e}`);
+      }
+    },
+    [],
+  );
+
+  /** Gestion interne du drop depuis le système custom DragDropProvider */
+  const handleInternalDrop = useCallback((items: string[], targetEl: Element) => {
+    const targetType = targetEl.getAttribute("data-drop-target");
+    if (targetType === "favorites") {
+      items.forEach((path) => {
+        const name = path.split(/[\\/]/).pop() || path;
+        const isDir = !name.includes(".") || path.endsWith("/") || path.endsWith("\\");
+        addFavorite({ path, name, isDir });
+      });
+    } else if (targetType === "space") {
+      const spaceId = targetEl.getAttribute("data-space-id");
+      if (spaceId && items.length > 0) {
+        handleDropToSpace(spaceId, items[0]);
+      }
+    }
+  }, [addFavorite, handleDropToSpace]);
+
+  // Enregistre le handler dans la ref module-level pour DragDropProvider
+  useEffect(() => {
+    _appDropHandler.current = handleInternalDrop;
+    return () => {
+      _appDropHandler.current = null;
+    };
+  }, [handleInternalDrop]);
 
   /** Bascule un favori depuis la vue Home. */
   const toggleFavoriteFromRecord = useCallback(
@@ -531,7 +647,6 @@ function AppContent() {
     (e: React.MouseEvent, entry: FileEntry) => {
       e.stopPropagation();
       if (e.ctrlKey || e.metaKey) {
-        // Ctrl+clic : bascule
         setSelectedPaths((prev) => {
           const next = new Set(prev);
           if (next.has(entry.path)) {
@@ -543,7 +658,6 @@ function AppContent() {
         });
         lastSelectedPath.current = entry.path;
       } else if (e.shiftKey && lastSelectedPath.current) {
-        // Shift+clic : plage
         const paths = visibleEntries.map((e) => e.path);
         const startIdx = paths.indexOf(lastSelectedPath.current);
         const endIdx = paths.indexOf(entry.path);
@@ -554,7 +668,6 @@ function AppContent() {
           setSelectedPaths(range);
         }
       } else {
-        // Clic simple : ouvrir si dossier, sinon sélection unique
         if (entry.isDir) {
           void openEntry(entry);
         } else {
@@ -694,7 +807,6 @@ function AppContent() {
       const items: ContextMenuItem[] = [];
 
       if (entry) {
-        // Menu sur un fichier/dossier
         if (entry.isDir) {
           items.push({
             label: t("context.open"),
@@ -758,7 +870,6 @@ function AppContent() {
           onClick: () => setPropertiesPath(entry.path),
         });
       } else {
-        // Menu sur le fond
         items.push({
           label: t("context.new_folder"),
           icon: FolderPlus,
@@ -793,7 +904,6 @@ function AppContent() {
         target &&
         (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
 
-      // Raccourcis qui fonctionnent même dans les inputs
       if (e.key === "Backspace" && !inInput && history.length > 0) {
         e.preventDefault();
         void goBack();
@@ -811,7 +921,6 @@ function AppContent() {
         void goUp();
       }
 
-      // Raccourcis hors inputs
       if (inInput) return;
 
       if (e.key === "Delete" && selectedPaths.size > 0) {
@@ -876,6 +985,12 @@ function AppContent() {
     return new Set(clipboard.paths);
   }, [clipboard]);
 
+  // Determine the currently active space for the spaces view
+  const activeSpace = useMemo(
+    () => spaces.find((s) => s.id === currentSpaceId) ?? null,
+    [spaces, currentSpaceId],
+  );
+
   return (
     <main
       className="app"
@@ -889,11 +1004,13 @@ function AppContent() {
         specialDirs={specialDirs}
         drives={drives}
         favorites={favorites}
+        spaces={spaces}
         currentPath={currentPath}
-        isHomeView={showHomeView}
+        currentView={currentView}
+        currentSpaceId={currentSpaceId}
         onNavigate={(p) => void navigateTo(p)}
         onOpenHome={() => {
-          setShowHomeView(true);
+          setCurrentView("home");
           setCurrentPath(null);
           setEntries([]);
           void refreshHomeData();
@@ -904,6 +1021,25 @@ function AppContent() {
         canAnalyze={!!currentPath}
         onRemoveFavorite={(p) => void removeFavorite(p)}
         onDropToSidebar={(p) => void handleDropToSidebar(p)}
+        onNavigateView={(v) => navigateView(v)}
+        onOpenSpace={(id) => openSpace(id)}
+        onCreateSpace={() => {
+          setEditingSpace(null);
+          setSpaceManagerOpen(true);
+        }}
+        onDeleteSpace={async (id) => {
+          try {
+            const updated = await invoke<Space[]>("delete_space", { id });
+            setSpaces(updated);
+            if (currentSpaceId === id) {
+              setCurrentView("home");
+              setCurrentSpaceId(null);
+            }
+          } catch (e) {
+            setError(`Impossible de supprimer l'espace : ${e}`);
+          }
+        }}
+        onDropToSpace={(spaceId, folder) => void handleDropToSpace(spaceId, folder)}
       />
 
       <div className="main-area">
@@ -922,7 +1058,8 @@ function AppContent() {
           </div>
         </header>
 
-        {showHomeView && (
+        {/* ---------- Vue Accueil ---------- */}
+        {currentView === "home" && (
           <div className="content home-content">
             <HomeView
               mostUsed={mostUsed}
@@ -935,266 +1072,306 @@ function AppContent() {
           </div>
         )}
 
-        {currentPath && !showHomeView && (
-          <div className="toolbar">
-            <button
-              className="icon-btn"
-              onClick={() => void goBack()}
-              disabled={history.length === 0}
-              title={t("app.back")}
-            >
-              ←
-            </button>
-            <button
-              className="icon-btn"
-              onClick={() => void goForward()}
-              disabled={forwardHistory.length === 0}
-              title={t("app.forward")}
-            >
-              →
-            </button>
-            <button
-              className="icon-btn"
-              onClick={() => void goUp()}
-              disabled={!parentPath(currentPath)}
-              title={t("app.up")}
-            >
-              ↑
-            </button>
-            <Breadcrumb
-              path={currentPath}
-              onNavigate={(p) => void navigateTo(p)}
-            />
-            <div className="search-container">
-              <Search size={14} className="search-icon" />
-              <input
-                className="search-input"
-                type="text"
-                placeholder={t("app.search")}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+        {/* ---------- Vue Fichiers ---------- */}
+        {currentView === "files" && currentPath && (
+          <>
+            <div className="toolbar">
               <button
-                className={`search-toggle-btn ${searchContent ? "active" : ""}`}
-                onClick={() => setSearchContent(!searchContent)}
-                title={searchContent ? t("search.by_content_on") : t("search.by_content_off")}
+                className="icon-btn"
+                onClick={() => void goBack()}
+                disabled={history.length === 0}
+                title={t("app.back")}
               >
-                {searchContent ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                ←
               </button>
-              {search && (
+              <button
+                className="icon-btn"
+                onClick={() => void goForward()}
+                disabled={forwardHistory.length === 0}
+                title={t("app.forward")}
+              >
+                →
+              </button>
+              <button
+                className="icon-btn"
+                onClick={() => void goUp()}
+                disabled={!parentPath(currentPath)}
+                title={t("app.up")}
+              >
+                ↑
+              </button>
+              <Breadcrumb
+                path={currentPath}
+                onNavigate={(p) => void navigateTo(p)}
+              />
+              <div className="search-container">
+                <Search size={14} className="search-icon" />
+                <input
+                  className="search-input"
+                  type="text"
+                  placeholder={t("app.search")}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                <SearchFilters
+                  filters={searchFilters}
+                  onFiltersChange={setSearchFilters}
+                  onClear={() => setSearchFilters({})}
+                />
                 <button
-                  className="icon-btn"
-                  onClick={() => {
-                    setSearch("");
-                    setSearchResults([]);
-                  }}
-                  title={t("app.clear_search")}
+                  className={`search-toggle-btn ${searchContent ? "active" : ""}`}
+                  onClick={() => setSearchContent(!searchContent)}
+                  title={searchContent ? t("search.by_content_on") : t("search.by_content_off")}
                 >
-                  <X size={14} />
+                  {searchContent ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
                 </button>
-              )}
+                {search && (
+                  <button
+                    className="icon-btn"
+                    onClick={() => {
+                      setSearch("");
+                      setSearchResults([]);
+                    }}
+                    title={t("app.clear_search")}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
 
-              {/* Résultats de recherche */}
-              {search && searchResults.length > 0 && (
-                <div className="search-results">
-                  {searching && <div className="search-status">{t("app.searching")}</div>}
-                  {searchResults.map((r) => (
+                {/* Résultats de recherche */}
+                {search && searchResults.length > 0 && (
+                  <div className="search-results">
+                    {searching && <div className="search-status">{t("app.searching")}</div>}
+                    {searchResults.map((r) => (
+                      <button
+                        key={r.path}
+                        className="search-result-item"
+                        onClick={() => {
+                          const parent = parentPath(r.path);
+                          if (parent) void navigateTo(r.path);
+                          else if (!r.is_dir) {
+                            const p = parentPath(r.path);
+                            if (p) void navigateTo(p);
+                          }
+                          setSearch("");
+                          setSearchResults([]);
+                        }}
+                        onDoubleClick={() => {
+                          if (!r.is_dir) void invoke("open_file", { path: r.path });
+                        }}
+                      >
+                        <span className="search-result-icon">
+                          {r.is_dir ? <FolderOpen size={14} /> : <FileText size={14} />}
+                        </span>
+                        <div className="search-result-info">
+                          <span className="search-result-name">{highlightMatch(r.name, search)}</span>
+                          <span className="search-result-path">{r.path}</span>
+                          {r.context && (
+                            <span className="search-result-context">{r.context}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {search && !searching && searchResults.length === 0 && (
+                  <div className="search-results">
+                    <div className="search-status">{t("app.no_results")}</div>
+                  </div>
+                )}
+              </div>
+              <div className="toolbar-divider" />
+              <button
+                className="toolbar-action"
+                onClick={() => setDialog({ type: "create-dir" })}
+                title={t("app.new_folder_title")}
+              >
+                <FolderPlus size={14} /> {t("app.new_folder")}
+              </button>
+              <button
+                className="toolbar-action"
+                onClick={() => setDialog({ type: "create-file" })}
+                title={t("app.new_file_title")}
+              >
+                <FilePlus size={14} /> {t("app.new_file")}
+              </button>
+              <button
+                className="toolbar-action"
+                onClick={copySelection}
+                disabled={selectedPaths.size === 0}
+                title={t("app.copy_title")}
+              >
+                <Copy size={14} />
+              </button>
+              <button
+                className="toolbar-action"
+                onClick={cutSelection}
+                disabled={selectedPaths.size === 0}
+                title={t("app.cut_title")}
+              >
+                <Scissors size={14} />
+              </button>
+              <button
+                className="toolbar-action"
+                onClick={() => void pasteClipboard()}
+                disabled={!clipboard}
+                title={t("app.paste_title")}
+              >
+                <ClipboardPaste size={14} />
+              </button>
+              <button
+                className="toolbar-action"
+                onClick={() => {
+                  const entry = entries.find(e => selectedPaths.has(e.path));
+                  if (entry && !entry.isDir) void invoke("edit_file", { path: entry.path });
+                }}
+                disabled={selectedPaths.size !== 1 || !entries.find(e => selectedPaths.has(e.path))?.isDir === false}
+                title={t("app.edit_title")}
+              >
+                <FileEdit size={14} />
+              </button>
+              <button
+                className="toolbar-action danger"
+                onClick={() => {
+                  if (selectedPaths.size > 0) {
+                    const names = entries
+                      .filter((en) => selectedPaths.has(en.path))
+                      .map((en) => en.name);
+                    setDialog({
+                      type: "delete",
+                      paths: [...selectedPaths],
+                      names,
+                    });
+                  }
+                }}
+                disabled={selectedPaths.size === 0}
+                title={t("app.delete_title")}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            {error && <div className="error">{error}</div>}
+
+            <div className="content">
+              <FileList
+                entries={visibleEntries}
+                folderSizes={folderSizes}
+                selectedPaths={selectedPaths}
+                cutPaths={cutPaths}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                loading={loading}
+                search={search}
+                onToggleSort={toggleSort}
+                onRowClick={handleRowClick}
+                onRowContextMenu={showContextMenu}
+                onRowDoubleClick={(entry) => void openEntry(entry)}
+                onBackgroundContextMenu={showContextMenu}
+                onBackgroundClick={(e) => {
+                  if (e.target === e.currentTarget) clearSelection();
+                }}
+                onVisibleEntriesChange={handleVisibleEntriesChange}
+                rowAction={(entry) => {
+                  const pinned = isFavorite(entry.path);
+                  return (
                     <button
-                      key={r.path}
-                      className="search-result-item"
-                      onClick={() => {
-                        const parent = parentPath(r.path);
-                        if (parent) void navigateTo(r.path);
-                        else if (!r.is_dir) {
-                          const p = parentPath(r.path);
-                          if (p) void navigateTo(p);
-                        }
-                        setSearch("");
-                        setSearchResults([]);
+                      className="row-pin-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (pinned) void removeFavorite(entry.path);
+                        else
+                          void addFavorite({
+                            path: entry.path,
+                            name: entry.name,
+                            isDir: entry.isDir,
+                          });
                       }}
-                      onDoubleClick={() => {
-                        if (!r.is_dir) void invoke("open_file", { path: r.path });
-                      }}
+                      title={pinned ? t("home.unpin") : t("home.pin")}
                     >
-                      <span className="search-result-icon">
-                        {r.is_dir ? <FolderOpen size={14} /> : <FileText size={14} />}
-                      </span>
-                      <div className="search-result-info">
-                        <span className="search-result-name">{highlightMatch(r.name, search)}</span>
-                        <span className="search-result-path">{r.path}</span>
-                        {r.context && (
-                          <span className="search-result-context">{r.context}</span>
-                        )}
-                      </div>
+                      <Star size={13} fill={pinned ? "currentColor" : "none"} />
                     </button>
-                  ))}
-                </div>
-              )}
-              {search && !searching && searchResults.length === 0 && (
-                <div className="search-results">
-                  <div className="search-status">{t("app.no_results")}</div>
-                </div>
+                  );
+                }}
+              />
+
+              {storageStats && (
+                <aside className="storage-panel">
+                  <h2>{t("storage.title")}</h2>
+                  <div className="storage-total">
+                    <span className="label">{t("storage.total")}</span>
+                    <strong>{formatSize(storageStats.totalSize)}</strong>
+                  </div>
+                  <div className="storage-total">
+                    <span className="label">{t("storage.files")}</span>
+                    <strong>{storageStats.fileCount.toLocaleString()}</strong>
+                  </div>
+                  <h3>{t("storage.by_category")}</h3>
+                  {storageStats.byCategory.length === 0 && (
+                    <p className="muted">{t("storage.empty")}</p>
+                  )}
+                  {storageStats.byCategory.map((cat) => {
+                    const percent =
+                      storageStats.totalSize > 0
+                        ? (cat.size / storageStats.totalSize) * 100
+                        : 0;
+                    return (
+                      <div key={cat.category} className="storage-bar">
+                        <div className="storage-bar-label">
+                          <span>{categoryLabel(t, cat.category)}</span>
+                          <span className="muted">
+                            {formatSize(cat.size)} · {cat.count.toLocaleString()}{" "}
+                            {t("storage.files").toLowerCase()}{cat.count > 1 ? "s" : ""}
+                          </span>
+                        </div>
+                        <div className="bar-track">
+                          <div
+                            className="bar-fill"
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </aside>
               )}
             </div>
-            <div className="toolbar-divider" />
-            <button
-              className="toolbar-action"
-              onClick={() => setDialog({ type: "create-dir" })}
-              title={t("app.new_folder_title")}
-            >
-              <FolderPlus size={14} /> {t("app.new_folder")}
-            </button>
-            <button
-              className="toolbar-action"
-              onClick={() => setDialog({ type: "create-file" })}
-              title={t("app.new_file_title")}
-            >
-              <FilePlus size={14} /> {t("app.new_file")}
-            </button>
-            <button
-              className="toolbar-action"
-              onClick={copySelection}
-              disabled={selectedPaths.size === 0}
-              title={t("app.copy_title")}
-            >
-              <Copy size={14} />
-            </button>
-            <button
-              className="toolbar-action"
-              onClick={cutSelection}
-              disabled={selectedPaths.size === 0}
-              title={t("app.cut_title")}
-            >
-              <Scissors size={14} />
-            </button>
-            <button
-              className="toolbar-action"
-              onClick={() => void pasteClipboard()}
-              disabled={!clipboard}
-              title={t("app.paste_title")}
-            >
-              <ClipboardPaste size={14} />
-            </button>
-            <button
-              className="toolbar-action"
-              onClick={() => {
-                const entry = entries.find(e => selectedPaths.has(e.path));
-                if (entry && !entry.isDir) void invoke("edit_file", { path: entry.path });
-              }}
-              disabled={selectedPaths.size !== 1 || !entries.find(e => selectedPaths.has(e.path))?.isDir === false}
-              title={t("app.edit_title")}
-            >
-              <FileEdit size={14} />
-            </button>
-            <button
-              className="toolbar-action danger"
-              onClick={() => {
-                if (selectedPaths.size > 0) {
-                  const names = entries
-                    .filter((en) => selectedPaths.has(en.path))
-                    .map((en) => en.name);
-                  setDialog({
-                    type: "delete",
-                    paths: [...selectedPaths],
-                    names,
-                  });
-                }
-              }}
-              disabled={selectedPaths.size === 0}
-              title={t("app.delete_title")}
-            >
-              <Trash2 size={14} />
-            </button>
+          </>
+        )}
+
+        {/* ---------- Vue Space ---------- */}
+        {currentView === "space" && activeSpace && (
+          <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <SpacesView
+              spaceId={currentSpaceId!}
+              spaceName={activeSpace.name}
+              onNavigateToFolder={navigateTo}
+            />
+          </div>
+        )}
+
+        {/* ---------- Vue Biggest Files ---------- */}
+        {currentView === "biggest-files" && (
+          <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <BiggestFilesView />
+          </div>
+        )}
+
+        {/* ---------- Vue Biggest Folders ---------- */}
+        {currentView === "biggest-folders" && (
+          <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <BiggestFoldersView onNavigate={navigateTo} />
+          </div>
+        )}
+
+        {/* ---------- Vue Insights ---------- */}
+        {currentView === "insights" && (
+          <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <InsightsView />
           </div>
         )}
 
         {error && <div className="error">{error}</div>}
-
-        {currentPath && !showHomeView && (
-          <div className="content">
-            <FileList
-              entries={visibleEntries}
-              folderSizes={folderSizes}
-              selectedPaths={selectedPaths}
-              cutPaths={cutPaths}
-              sortKey={sortKey}
-              sortDir={sortDir}
-              loading={loading}
-              search={search}
-              onToggleSort={toggleSort}
-              onRowClick={handleRowClick}
-              onRowContextMenu={showContextMenu}
-              onRowDoubleClick={(entry) => void openEntry(entry)}
-              onBackgroundContextMenu={showContextMenu}
-              onBackgroundClick={(e) => {
-                if (e.target === e.currentTarget) clearSelection();
-              }}
-              onVisibleEntriesChange={handleVisibleEntriesChange}
-              rowAction={(entry) => {
-                const pinned = isFavorite(entry.path);
-                return (
-                  <button
-                    className="row-pin-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (pinned) void removeFavorite(entry.path);
-                      else
-                        void addFavorite({
-                          path: entry.path,
-                          name: entry.name,
-                          isDir: entry.isDir,
-                        });
-                    }}
-                    title={pinned ? t("home.unpin") : t("home.pin")}
-                  >
-                    <Star size={13} fill={pinned ? "currentColor" : "none"} />
-                  </button>
-                );
-              }}
-            />
-
-            {storageStats && (
-              <aside className="storage-panel">
-                <h2>{t("storage.title")}</h2>
-                <div className="storage-total">
-                  <span className="label">{t("storage.total")}</span>
-                  <strong>{formatSize(storageStats.totalSize)}</strong>
-                </div>
-                <div className="storage-total">
-                  <span className="label">{t("storage.files")}</span>
-                  <strong>{storageStats.fileCount.toLocaleString()}</strong>
-                </div>
-                <h3>{t("storage.by_category")}</h3>
-                {storageStats.byCategory.length === 0 && (
-                  <p className="muted">{t("storage.empty")}</p>
-                )}
-                {storageStats.byCategory.map((cat) => {
-                  const percent =
-                    storageStats.totalSize > 0
-                      ? (cat.size / storageStats.totalSize) * 100
-                      : 0;
-                  return (
-                    <div key={cat.category} className="storage-bar">
-                      <div className="storage-bar-label">
-                        <span>{categoryLabel(t, cat.category)}</span>
-                        <span className="muted">
-                          {formatSize(cat.size)} · {cat.count.toLocaleString()}{" "}
-                          {t("storage.files").toLowerCase()}{cat.count > 1 ? "s" : ""}
-                        </span>
-                      </div>
-                      <div className="bar-track">
-                        <div
-                          className="bar-fill"
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </aside>
-            )}
-          </div>
-        )}
 
         {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
         {propertiesPath && (
@@ -1257,16 +1434,39 @@ function AppContent() {
             onClose={() => setDialog(null)}
           />
         )}
+
+        {/* ---------- Space Manager ---------- */}
+        {spaceManagerOpen && (
+          <SpaceManager
+            space={editingSpace}
+            onClose={() => {
+              setSpaceManagerOpen(false);
+              setEditingSpace(null);
+            }}
+            onChange={() => {
+              loadSpaces();
+            }}
+          />
+        )}
       </div>
     </main>
   );
 }
 
 export default function App() {
+  const handleInternalDrop = useCallback((items: string[], targetEl: Element) => {
+    if (_appDropHandler.current) {
+      _appDropHandler.current(items, targetEl);
+    }
+  }, []);
+
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <AppContent />
+        <DragDropProvider onDrop={handleInternalDrop}>
+          <AppContent />
+          <DragPreview />
+        </DragDropProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

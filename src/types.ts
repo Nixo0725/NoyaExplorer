@@ -111,6 +111,23 @@ export interface SearchResult {
   score: number;
 }
 
+/* ---------- Advanced search filters ---------- */
+
+export interface SearchFilters {
+  extensions?: string[];
+  category?: string;
+  minSize?: number;
+  maxSize?: number;
+  modifiedBefore?: number;
+  modifiedAfter?: number;
+  createdBefore?: number;
+  createdAfter?: number;
+  location?: string;
+  recentOnly?: boolean;
+  oldOnly?: boolean;
+  largeOnly?: boolean;
+}
+
 /* ---------- Favorites & access history ---------- */
 
 export interface FavoriteItem {
@@ -128,3 +145,67 @@ export interface AccessRecord {
   lastAccessed: number;
   modified: number;
 }
+
+/* ---------- Spaces ---------- */
+
+export interface Space {
+  id: string;
+  name: string;
+  icon: string;
+  folders: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/* ---------- Biggest files ---------- */
+
+export interface BiggestFile {
+  name: string;
+  path: string;
+  size: number;
+  category: string;
+  modified: number;
+}
+
+/* ---------- Biggest folders ---------- */
+
+export interface BiggestFolder {
+  name: string;
+  path: string;
+  totalSize: number;
+  fileCount: number;
+}
+
+/* ---------- Storage insights ---------- */
+
+export interface ExtensionStat {
+  extension: string;
+  totalSize: number;
+  fileCount: number;
+  percentage: number;
+}
+
+export interface OldFileInfo {
+  path: string;
+  name: string;
+  size: number;
+  lastModified: number;
+  category: string;
+}
+
+export interface StorageInsights {
+  largestExtensions: ExtensionStat[];
+  oldFiles: OldFileInfo[];
+  totalScanned: number;
+}
+
+/* ---------- View routing ---------- */
+
+/** The different views/screens in the application. */
+export type AppView =
+  | "home"
+  | "files"
+  | "space"
+  | "biggest-files"
+  | "biggest-folders"
+  | "insights";
