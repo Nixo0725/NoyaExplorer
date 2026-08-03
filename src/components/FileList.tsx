@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { FileEntry, SortKey, SortDirection } from "../types";
 import { formatSize, formatDate } from "../lib/format";
@@ -6,6 +6,10 @@ import { getTypeInfo } from "../lib/fileType";
 import { typeLabel } from "../lib/category";
 import FileIcon from "./FileIcon";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useDragDropContext } from "./DragDropProvider";
+
+/** Distance minimale (px) de mouvement pour initier un drag (anti-accroc) */
+const DRAG_THRESHOLD = 5;
 
 interface FileListProps {
   entries: FileEntry[];
@@ -30,6 +34,11 @@ interface FileListProps {
 
 /** Hauteur estimée d'une ligne de fichier (en px). Doit correspondre au CSS. */
 const ROW_HEIGHT = 34;
+
+/** Seuil (px) depuis le bord pour déclencher l'auto-scroll */
+const SCROLL_THRESHOLD = 50;
+/** Vitesse maximale de l'auto-scroll (px par frame) */
+const MAX_SCROLL_SPEED = 10;
 
 /**
  * Liste de fichiers virtualisée.
@@ -58,6 +67,11 @@ function FileList({
 }: FileListProps) {
   const { t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { startInternalDrag, state } = useDragDropContext();
+  // Ref pour détecter click vs drag
+  const dragStartPos = useRef<{ x: number; y: number; entry: FileEntry | null }>({
+    x: 0, y: 0, entry: null,
+  });
 
   const virtualizer = useVirtualizer({
     count: entries.length,
@@ -78,12 +92,94 @@ function FileList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, entries]);
 
+  // Détection du drag : quand l'utilisateur mousedown sur une ligne puis
+  // déplace la souris de plus de DRAG_THRESHOLD px, on initie un drag custom.
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const start = dragStartPos.current;
+      if (!start.entry) return;
+      if (state.isDragging) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+        const entry = start.entry;
+        const paths =
+          selectedPaths.size > 0 && selectedPaths.has(entry.path)
+            ? [...selectedPaths]
+            : [entry.path];
+        startInternalDrag(paths, e.clientX, e.clientY);
+      }
+    };
+    const handleMouseUp = () => {
+      dragStartPos.current = { x: 0, y: 0, entry: null };
+    };
+    window.addEventListener("mousemove", handleMouseMove, true);
+    window.addEventListener("mouseup", handleMouseUp, true);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove, true);
+      window.removeEventListener("mouseup", handleMouseUp, true);
+    };
+  }, [selectedPaths, startInternalDrag, state.isDragging]);
+
+  /* ---------- Auto-scroll pendant le drag ---------- */
+
+  const autoScrollRef = useRef<number | null>(null);
+
+  // Nettoie l'animation au démontage
+  useEffect(() => {
+    return () => {
+      if (autoScrollRef.current !== null) {
+        cancelAnimationFrame(autoScrollRef.current);
+      }
+    };
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    // Annule toute animation en cours
+    if (autoScrollRef.current !== null) {
+      cancelAnimationFrame(autoScrollRef.current);
+      autoScrollRef.current = null;
+    }
+
+    if (y < SCROLL_THRESHOLD) {
+      // Curseur près du bord supérieur → scroll vers le haut
+      const factor = 1 - y / SCROLL_THRESHOLD;
+      const speed = Math.min(factor, 1) * MAX_SCROLL_SPEED;
+      const scroll = () => {
+        if (el) {
+          el.scrollTop -= speed;
+          autoScrollRef.current = requestAnimationFrame(scroll);
+        }
+      };
+      autoScrollRef.current = requestAnimationFrame(scroll);
+    } else if (y > height - SCROLL_THRESHOLD) {
+      // Curseur près du bord inférieur → scroll vers le bas
+      const factor = (y - (height - SCROLL_THRESHOLD)) / SCROLL_THRESHOLD;
+      const speed = Math.min(factor, 1) * MAX_SCROLL_SPEED;
+      const scroll = () => {
+        if (el) {
+          el.scrollTop += speed;
+          autoScrollRef.current = requestAnimationFrame(scroll);
+        }
+      };
+      autoScrollRef.current = requestAnimationFrame(scroll);
+    }
+  }, []);
+
   return (
     <section
       className="file-list"
       ref={scrollRef}
       onContextMenu={onBackgroundContextMenu}
       onClick={onBackgroundClick}
+      onDragOver={handleDragOver}
     >
       <div className="list-header">
         <span className="col-icon" />
@@ -143,15 +239,25 @@ function FileList({
                   width: "100%",
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
-                onClick={(e) => onRowClick(e, entry)}
-                onContextMenu={(e) => onRowContextMenu(e, entry)}
-                onDoubleClick={() => onRowDoubleClick(entry)}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData("text/plain", entry.path);
-                  e.dataTransfer.setData("application/x-noya-entry", entry.path);
-                  e.dataTransfer.effectAllowed = "copyMove";
+                onClick={(e) => {
+                  // Si on était en train de draguer, on ignore le click
+                  if (state.isDragging) return;
+                  onRowClick(e, entry);
                 }}
-                draggable
+                onContextMenu={(e) => onRowContextMenu(e, entry)}
+                onDoubleClick={() => {
+                  if (state.isDragging) return;
+                  onRowDoubleClick(entry);
+                }}
+                onMouseDown={(e) => {
+                  // Enregistre la position pour détecter click vs drag
+                  // L'écouteur window mousemove (useEffect) vérifiera le seuil
+                  dragStartPos.current = {
+                    x: e.clientX,
+                    y: e.clientY,
+                    entry,
+                  };
+                }}
                 title={entry.path}
               >
                 <span className="file-icon">

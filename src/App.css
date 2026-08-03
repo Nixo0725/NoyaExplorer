@@ -478,7 +478,7 @@ body {
 .list-header,
 .file-row {
   display: grid;
-  grid-template-columns: 28px minmax(120px, 1fr) 100px 140px 140px;
+  grid-template-columns: 28px minmax(120px, 1fr) 100px 140px 140px 36px;
   align-items: center;
   gap: 12px;
   padding: 6px 10px;
@@ -585,6 +585,52 @@ body {
 .file-size,
 .file-date {
   text-align: right;
+}
+
+/* ---------- Spaces View ---------- */
+
+.space-title {
+  margin: 0 0 8px;
+  padding: 0 10px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/**
+ * La vue espace ajoute une colonne "Dossier source" à la grille.
+ * On surcharge la grille standard (6 colonnes → 7).
+ */
+.space-file-list .list-header,
+.space-file-row {
+  grid-template-columns: 28px minmax(120px, 1fr) 80px 100px 100px minmax(100px, 1.2fr);
+}
+
+.file-source {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-folder-link {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  display: block;
+}
+
+.source-folder-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
 }
 
 /* ---------- Storage panel ---------- */
@@ -957,6 +1003,110 @@ body {
 
 .dialog-confirm:not(.danger):hover:not(:disabled) {
   background: var(--accent-soft);
+}
+
+/* ---------- Space Manager (dialog étendu) ---------- */
+
+.space-manager-modal {
+  max-width: 480px;
+}
+
+.space-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.space-manager-header .dialog-title {
+  margin: 0;
+}
+
+.icon-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.icon-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.icon-option:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.icon-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.space-folders-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.space-folders-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+
+.space-folders-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.space-folder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.space-folder-path {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.space-folder-icon {
+  flex-shrink: 0;
+  color: var(--cat-folder);
+}
+
+.dialog-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--error);
+  padding: 4px 0;
 }
 
 /* ---------- Properties panel ---------- */
@@ -1355,4 +1505,789 @@ body {
 
 .home-recent-pin:hover {
   color: var(--accent);
+}
+
+/* ---------- Espaces personnalisés ---------- */
+
+.space-view {
+  padding: 24px 32px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.space-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.space-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.space-description {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ---------- Cleanup tabs ---------- */
+
+.cleanup-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 3px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.cleanup-tab {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+
+.cleanup-tab:hover:not(.active) {
+  color: var(--text);
+}
+
+.cleanup-tab.active {
+  background: var(--bg);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.cleanup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cleanup-table-header {
+  display: grid;
+  grid-template-columns: 1fr 120px 140px 40px;
+  gap: 12px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-strong);
+  margin-bottom: 4px;
+}
+
+.cleanup-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 140px 40px;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  transition: background var(--transition);
+}
+
+.cleanup-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.cleanup-col-name {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.cleanup-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cleanup-col-size,
+.cleanup-col-date {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cleanup-col-action {
+  display: flex;
+  justify-content: center;
+}
+
+/* Duplicates */
+.duplicate-group {
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.duplicate-group-header {
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.duplicate-file-row {
+  padding-left: 24px;
+}
+
+.duplicate-file-row .cleanup-col-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+/* Suspicious file cards */
+.suspicious-file-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+}
+
+.suspicious-file-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.suspicious-file-path {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suspicious-issue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.suspicious-severity {
+  font-size: 11px;
+}
+
+.suspicious-issue-desc {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* ---------- Filtres avancés ---------- */
+
+.filters-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 300px;
+  height: 100vh;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-strong);
+  z-index: 100;
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+
+.filters-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filter-input,
+.filter-select {
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+/* ---------- Biggest Files View ---------- */
+
+.biggest-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.view-title {
+  margin: 0;
+  padding: 12px 16px 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* Toolbar interne */
+
+.toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border-strong);
+  flex-shrink: 0;
+}
+
+.limit-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.limit-label select {
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.limit-label select:focus {
+  border-color: var(--accent);
+}
+
+.scan-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* Grille spécifique à BiggestFilesView (6 colonnes sans icône) */
+
+.biggest-file-list .list-header,
+.biggest-file-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(160px, 1.5fr) 100px 120px 120px 80px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+}
+
+.biggest-file-row {
+  width: 100%;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 13px;
+  margin: 1px 0;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.biggest-file-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.col-actions-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.file-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.file-category {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.file-actions .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+  border-color: var(--accent);
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- SearchFilters toggle & dropdown ---------- */
+
+.search-filters {
+  position: relative;
+  display: inline-flex;
+}
+
+.search-filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition),
+    border-color var(--transition);
+}
+
+.search-filters-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--text);
+}
+
+.search-filters-toggle.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.search-filters-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 14px;
+  z-index: 150;
+}
+
+.search-filters-panel .filters-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---------- Checkboxes dans les filtres ---------- */
+
+.filter-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter-checkbox input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ---------- Biggest Folders View ---------- */
+
+.drive-select {
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  min-width: 180px;
+}
+
+.drive-select:focus {
+  border-color: var(--accent);
+}
+
+.drive-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Grille spécifique à BiggestFoldersView (4 colonnes + actions) */
+
+.biggest-folder-list .list-header,
+.biggest-folder-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(160px, 1.5fr) 100px 100px 60px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+}
+
+.biggest-folder-row {
+  width: 100%;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 13px;
+  margin: 1px 0;
+  transition: background var(--transition), border-color var(--transition);
+  cursor: pointer;
+}
+
+.biggest-folder-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.biggest-folder-row:active {
+  background: var(--bg-selected);
+}
+
+.file-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ---------- Storage Insights View ---------- */
+
+/* Conteneur scrollable pour les sections de résultats */
+.insights-results {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.insights-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.insights-section:last-of-type {
+  border-bottom: none;
+}
+
+.insights-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ---- Tableau des extensions ---- */
+
+.extension-table .list-header {
+  display: grid;
+  grid-template-columns: 100px 100px 80px 80px 1fr;
+  gap: 12px;
+  padding: 6px 10px;
+}
+
+.extension-row {
+  display: grid;
+  grid-template-columns: 100px 100px 80px 80px 1fr;
+  gap: 12px;
+  padding: 6px 10px;
+  align-items: center;
+  font-size: 13px;
+  border-radius: var(--radius);
+  transition: background var(--transition);
+  margin: 1px 0;
+}
+
+.extension-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.extension-name {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.extension-percentage {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.extension-bar {
+  display: flex;
+  align-items: center;
+}
+
+.extension-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.extension-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+
+/* ---- Groupes de fichiers anciens ---- */
+
+.old-file-group {
+  margin-bottom: 16px;
+}
+
+.old-file-group:last-child {
+  margin-bottom: 0;
+}
+
+.old-file-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.old-file-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.old-file-desc {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.old-file-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.old-file-item {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(200px, 2fr) 80px 120px;
+  gap: 12px;
+  padding: 6px 10px;
+  align-items: center;
+  font-size: 13px;
+  border-radius: var(--radius);
+  transition: background var(--transition);
+  border: none;
+  border-left: 2px solid transparent;
+  color: var(--text);
+  text-align: left;
+  margin: 1px 0;
+}
+
+.old-file-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.old-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* ---- Note d'information ---- */
+
+.info-note {
+  margin: 12px 16px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+/* ---------- Drag Preview (overlay) ---------- */
+
+.drag-preview {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  user-select: none;
+}
+
+.drag-preview-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+
+.drag-preview-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.drag-preview-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+  font-weight: 600;
+}
+
+.drag-preview-count {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.drag-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
+.drag-preview-badge.copy {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.drag-preview-badge.move {
+  background: rgba(234, 179, 8, 0.12);
+  color: var(--warning);
+}
+
+.drag-preview-badge.link {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- Sidebar space drag-over ---------- */
+
+.sidebar-space.drag-over,
+.sidebar-space.drag-over:hover {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
 }
