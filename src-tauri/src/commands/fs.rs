@@ -252,10 +252,18 @@ pub fn edit_file(path: &str) -> Result<(), String> {
             .map_err(|e| format!("Impossible d'ouvrir l'éditeur : {}", e))?;
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
-        // Fallback: try to open with system default editor
-        let _ = std::process::Command::new("notepad")
+        std::process::Command::new("open")
+            .args(["-t", path])
+            .spawn()
+            .map_err(|e| format!("Impossible d'ouvrir l'éditeur : {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "xdg-open".to_string());
+        std::process::Command::new(&editor)
             .arg(path)
             .spawn()
             .map_err(|e| format!("Impossible d'ouvrir l'éditeur : {}", e))?;

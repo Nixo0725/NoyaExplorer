@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Home,
   Monitor,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import type { SpecialDir, DriveInfo, FavoriteItem, Space, AppView } from "../types";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useDragDropContext } from "./DragDropProvider";
 
 interface SidebarProps {
   homePath: string | null;
@@ -33,12 +33,10 @@ interface SidebarProps {
   analyzing: boolean;
   canAnalyze: boolean;
   onRemoveFavorite: (path: string) => void;
-  onDropToSidebar: (path: string) => void;
   onNavigateView: (view: AppView) => void;
   onOpenSpace: (id: string) => void;
   onCreateSpace: () => void;
   onDeleteSpace: (id: string) => void;
-  onDropToSpace: (spaceId: string, folder: string) => void;
 }
 
 /** Mapping des labels des dossiers spéciaux système vers les clés de traduction */
@@ -94,16 +92,31 @@ function Sidebar({
   analyzing,
   canAnalyze,
   onRemoveFavorite,
-  onDropToSidebar,
   onNavigateView,
   onOpenSpace,
   onCreateSpace,
   onDeleteSpace,
-  onDropToSpace,
 }: SidebarProps) {
   const { t } = useLanguage();
-  const [dragOver, setDragOver] = useState(false);
-  const [dragOverSpaceId, setDragOverSpaceId] = useState<string | null>(null);
+  const { state: dndState } = useDragDropContext();
+
+  // Surlignage des cibles pendant le drag CUSTOM (Pointer Events) :
+  // la cible survolée est suivie en direct par le DragDropProvider.
+  // NOTE : les anciens handlers HTML5 (onDragOver/onDrop/handleDrop/...)
+  // ont été supprimés : ils étaient du code mort car (1) aucun producteur
+  // n'appelait dataTransfer.setData(), et (2) Tauri garde dragDropEnabled
+  // à true (défaut), ce qui désactive HTML5 DnD dans la WebView. Les
+  // attributs [data-drop-target] sont conservés car le hit-tester du
+  // DragDropProvider s'appuie dessus.
+  const dndFavoritesHover =
+    dndState.isDragging &&
+    dndState.hoveredTarget != null &&
+    dndState.hoveredTarget.closest("[data-drop-target='favorites']") != null;
+
+  const isDndSpaceHover = (spaceId: string) =>
+    dndState.isDragging &&
+    dndState.hoveredTarget != null &&
+    dndState.hoveredTarget.closest(`[data-space-id="${spaceId}"]`) != null;
 
   const isActive = (path: string) =>
     currentPath !== null &&
@@ -111,22 +124,6 @@ function Sidebar({
       path.replace(/\\+$/, "").toLowerCase();
 
   const isViewActive = (view: AppView) => currentView === view;
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const path = e.dataTransfer.getData("application/x-noya-entry") ||
-      e.dataTransfer.getData("text/plain");
-    if (path) onDropToSidebar(path);
-  };
-
-  const handleSpaceDrop = (e: React.DragEvent, spaceId: string) => {
-    e.preventDefault();
-    setDragOverSpaceId(null);
-    const path = e.dataTransfer.getData("application/x-noya-entry") ||
-      e.dataTransfer.getData("text/plain");
-    if (path) onDropToSpace(spaceId, path);
-  };
 
   return (
     <aside className="sidebar">
@@ -141,9 +138,9 @@ function Sidebar({
             <span className="sidebar-icon">
               <Home size={16} />
             </span>
-            <span className="sidebar-label">{t("sidebar.home")}</span>
+            <span className="sidebar-label">{t("sidebar.dashboard")}</span>
           </button>
-          {homePath && currentView === "files" && (
+          {homePath && (
             <button
               className={`sidebar-item ${isActive(homePath) ? "active" : ""}`}
               onClick={() => onNavigate(homePath)}
@@ -205,16 +202,9 @@ function Sidebar({
 
         {/* ---------- Favoris ---------- */}
         <div
-          className={`sidebar-section favorites-section ${dragOver ? "drag-over" : ""}`}
+          className={`sidebar-section favorites-section ${dndFavoritesHover ? "drag-over" : ""}`}
           data-drop-target="favorites"
           data-path="__favorites__"
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "copy";
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
         >
           <div className="sidebar-title">{t("sidebar.favorites")}</div>
           {favorites.length === 0 && (
@@ -267,20 +257,12 @@ function Sidebar({
           {spaces.map((space) => (
             <div
               key={space.id}
-              className={`sidebar-item sidebar-space ${currentSpaceId === space.id ? "active" : ""} ${dragOverSpaceId === space.id ? "drag-over" : ""}`}
+              className={`sidebar-item sidebar-space ${currentSpaceId === space.id ? "active" : ""} ${isDndSpaceHover(space.id) ? "drag-over" : ""}`}
               data-drop-target="space"
               data-space-id={space.id}
               data-folder-path={space.folders[0] ?? ""}
               onClick={() => onOpenSpace(space.id)}
               title={space.name}
-              onDragOver={(e) => {
-                e.preventDefault();
-                // Utilise "link" pour indiquer qu'on ne déplace PAS les fichiers
-                e.dataTransfer.dropEffect = "link";
-                setDragOverSpaceId(space.id);
-              }}
-              onDragLeave={() => setDragOverSpaceId(null)}
-              onDrop={(e) => handleSpaceDrop(e, space.id)}
             >
               <span className="sidebar-icon">{spaceIcon(space.icon)}</span>
               <span className="sidebar-label">{space.name}</span>

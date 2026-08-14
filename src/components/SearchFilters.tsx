@@ -71,6 +71,7 @@ export default function SearchFilters({
 
   const hasAnyFilter =
     filters.extensions !== undefined ||
+    filters.location !== undefined ||
     filters.category !== undefined ||
     filters.minSize !== undefined ||
     filters.maxSize !== undefined ||
@@ -140,6 +141,20 @@ export default function SearchFilters({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* ---- Emplacement ---- */}
+            <div className="filter-group">
+              <label className="filter-label">{t("filters.location")}</label>
+              <input
+                className="filter-input"
+                type="text"
+                value={filters.location ?? ""}
+                onChange={(e) =>
+                  update({ location: e.target.value || undefined })
+                }
+                placeholder={t("filters.location")}
+              />
             </div>
 
             {/* ---- Taille min / max ---- */}

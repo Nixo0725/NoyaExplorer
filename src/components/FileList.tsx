@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { FileEntry, SortKey, SortDirection } from "../types";
 import { formatSize, formatDate } from "../lib/format";
@@ -35,17 +35,19 @@ interface FileListProps {
 /** Hauteur estimée d'une ligne de fichier (en px). Doit correspondre au CSS. */
 const ROW_HEIGHT = 34;
 
-/** Seuil (px) depuis le bord pour déclencher l'auto-scroll */
-const SCROLL_THRESHOLD = 50;
-/** Vitesse maximale de l'auto-scroll (px par frame) */
-const MAX_SCROLL_SPEED = 10;
-
 /**
  * Liste de fichiers virtualisée.
  *
  * Utilise `@tanstack/react-virtual` pour ne rendre que les lignes visibles dans
  * la zone de défilement, ce qui garantit un défilement fluide même avec des
  * dizaines de milliers d'entrées. L'en-tête reste collé en haut.
+ *
+ * Le drag & drop interne est géré par Pointer Events (voir DragDropProvider) :
+ * les lignes de dossier portent un attribut `data-drop-target="folder"` afin
+ * que le hit-tester géométrique les reconnaisse comme cibles de drop (pour
+ * déplacer/copier des fichiers dans le dossier). L'auto-scroll pendant le
+ * drag est désormais piloté par le DragDropProvider via l'attribut
+ * `data-scroll-container` posé sur cette section.
  */
 function FileList({
   entries,
@@ -69,9 +71,18 @@ function FileList({
   const scrollRef = useRef<HTMLDivElement>(null);
   const { startInternalDrag, state } = useDragDropContext();
   // Ref pour détecter click vs drag
-  const dragStartPos = useRef<{ x: number; y: number; entry: FileEntry | null }>({
-    x: 0, y: 0, entry: null,
+  const dragStartPos = useRef<{
+    x: number;
+    y: number;
+    entry: FileEntry | null;
+    pointerId: number;
+    element: HTMLElement | null;
+  }>({
+    x: 0, y: 0, entry: null, pointerId: -1, element: null,
   });
+  // Ref qui signale qu'un drag vient d'avoir lieu (pour ignorer le click
+  // de fin de drag qui arriverait sinon sur la ligne).
+  const didDragRef = useRef(false);
 
   const virtualizer = useVirtualizer({
     count: entries.length,
@@ -92,16 +103,20 @@ function FileList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, entries]);
 
-  // Détection du drag : quand l'utilisateur mousedown sur une ligne puis
+  // Détection du drag : quand l'utilisateur pointerdown sur une ligne puis
   // déplace la souris de plus de DRAG_THRESHOLD px, on initie un drag custom.
+  // Utilise des Pointer Events + setPointerCapture (voir onPointerDown des
+  // lignes) pour que le drag fonctionne de façon fiable sur Linux (WebKitGTK
+  // tenterait sinon de lancer un drag de texte HTML5 natif qui casse tout).
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
       const start = dragStartPos.current;
       if (!start.entry) return;
       if (state.isDragging) return;
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
       if (Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+        didDragRef.current = true;
         const entry = start.entry;
         const paths =
           selectedPaths.size > 0 && selectedPaths.has(entry.path)
@@ -110,76 +125,32 @@ function FileList({
         startInternalDrag(paths, e.clientX, e.clientY);
       }
     };
-    const handleMouseUp = () => {
-      dragStartPos.current = { x: 0, y: 0, entry: null };
+    const handlePointerUp = () => {
+      dragStartPos.current = {
+        x: 0, y: 0, entry: null, pointerId: -1, element: null,
+      };
     };
-    window.addEventListener("mousemove", handleMouseMove, true);
-    window.addEventListener("mouseup", handleMouseUp, true);
+    window.addEventListener("pointermove", handlePointerMove, true);
+    window.addEventListener("pointerup", handlePointerUp, true);
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove, true);
-      window.removeEventListener("mouseup", handleMouseUp, true);
+      window.removeEventListener("pointermove", handlePointerMove, true);
+      window.removeEventListener("pointerup", handlePointerUp, true);
     };
   }, [selectedPaths, startInternalDrag, state.isDragging]);
 
-  /* ---------- Auto-scroll pendant le drag ---------- */
-
-  const autoScrollRef = useRef<number | null>(null);
-
-  // Nettoie l'animation au démontage
-  useEffect(() => {
-    return () => {
-      if (autoScrollRef.current !== null) {
-        cancelAnimationFrame(autoScrollRef.current);
-      }
-    };
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const rect = el.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    const height = rect.height;
-
-    // Annule toute animation en cours
-    if (autoScrollRef.current !== null) {
-      cancelAnimationFrame(autoScrollRef.current);
-      autoScrollRef.current = null;
-    }
-
-    if (y < SCROLL_THRESHOLD) {
-      // Curseur près du bord supérieur → scroll vers le haut
-      const factor = 1 - y / SCROLL_THRESHOLD;
-      const speed = Math.min(factor, 1) * MAX_SCROLL_SPEED;
-      const scroll = () => {
-        if (el) {
-          el.scrollTop -= speed;
-          autoScrollRef.current = requestAnimationFrame(scroll);
-        }
-      };
-      autoScrollRef.current = requestAnimationFrame(scroll);
-    } else if (y > height - SCROLL_THRESHOLD) {
-      // Curseur près du bord inférieur → scroll vers le bas
-      const factor = (y - (height - SCROLL_THRESHOLD)) / SCROLL_THRESHOLD;
-      const speed = Math.min(factor, 1) * MAX_SCROLL_SPEED;
-      const scroll = () => {
-        if (el) {
-          el.scrollTop += speed;
-          autoScrollRef.current = requestAnimationFrame(scroll);
-        }
-      };
-      autoScrollRef.current = requestAnimationFrame(scroll);
-    }
-  }, []);
+  // Feedback visuel de la cible de drop dossier survolée pendant le drag.
+  const hoveredFolderPath =
+    state.isDragging && state.hoveredTarget
+      ? state.hoveredTarget.getAttribute("data-folder-path")
+      : null;
 
   return (
     <section
       className="file-list"
       ref={scrollRef}
+      data-scroll-container
       onContextMenu={onBackgroundContextMenu}
       onClick={onBackgroundClick}
-      onDragOver={handleDragOver}
     >
       <div className="list-header">
         <span className="col-icon" />
@@ -227,11 +198,17 @@ function FileList({
             const size = entry.isDir ? folderSizes[entry.path] : entry.size;
             const isSelected = selectedPaths.has(entry.path);
             const isCut = cutPaths.has(entry.path);
+            // Une ligne de dossier est une cible de drop (déplacer/copier des
+            // fichiers dedans). On expose les attributs utilisés par le
+            // hit-tester du DragDropProvider et par la branche "folder" du
+            // handleInternalDrop.
+            const isFolderDropTarget =
+              entry.isDir && hoveredFolderPath === entry.path;
 
             return (
               <button
                 key={entry.path}
-                className={`file-row ${isSelected ? "selected" : ""} ${isCut ? "cut" : ""}`}
+                className={`file-row ${isSelected ? "selected" : ""} ${isCut ? "cut" : ""} ${isFolderDropTarget ? "drop-target-active" : ""}`}
                 style={{
                   position: "absolute",
                   top: 0,
@@ -239,23 +216,46 @@ function FileList({
                   width: "100%",
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
+                {...(entry.isDir
+                  ? {
+                      "data-drop-target": "folder",
+                      "data-folder-path": entry.path,
+                    }
+                  : {})}
                 onClick={(e) => {
-                  // Si on était en train de draguer, on ignore le click
-                  if (state.isDragging) return;
+                  // Si on était en train de draguer ou qu'un drag vient
+                  // d'avoir lieu, on ignore le click de fin de drag.
+                  if (state.isDragging || didDragRef.current) return;
                   onRowClick(e, entry);
                 }}
                 onContextMenu={(e) => onRowContextMenu(e, entry)}
                 onDoubleClick={() => {
-                  if (state.isDragging) return;
+                  if (state.isDragging || didDragRef.current) return;
                   onRowDoubleClick(entry);
                 }}
-                onMouseDown={(e) => {
+                onPointerDown={(e) => {
+                  // NOTE : on n'appelle PAS e.preventDefault() ici — sur
+                  // WebKitGTK, annuler pointerdown peut annuler toute la
+                  // séquence pointermove/pointerup et donc empêcher le drag
+                  // de démarrer. La prévention du drag de texte HTML5 natif
+                  // est assurée par le CSS (.file-row user-select + drag none).
+                  didDragRef.current = false;
+                  // Capture le pointeur : garantit que pointermove/pointerup
+                  // sont délivrés même si le curseur sort de la ligne.
+                  try {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  } catch {
+                    // Certaines WebViews lèvent une erreur si le pointeur
+                    // est déjà libéré — on ignore.
+                  }
                   // Enregistre la position pour détecter click vs drag
-                  // L'écouteur window mousemove (useEffect) vérifiera le seuil
+                  // L'écouteur window pointermove (useEffect) vérifiera le seuil
                   dragStartPos.current = {
                     x: e.clientX,
                     y: e.clientY,
                     entry,
+                    pointerId: e.pointerId,
+                    element: e.currentTarget,
                   };
                 }}
                 title={entry.path}

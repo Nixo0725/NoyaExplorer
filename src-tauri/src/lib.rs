@@ -51,7 +51,6 @@ pub fn run() {
             commands::favorites::get_most_used,
             commands::favorites::get_recent_files,
             // System
-            commands::system::greet,
             commands::system::home_dir,
             commands::system::special_dirs,
             commands::system::list_drives,

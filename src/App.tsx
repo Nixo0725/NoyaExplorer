@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   FolderOpen,
@@ -60,8 +61,9 @@ import SearchFilters from "./components/SearchFilters";
 
 const LAST_PATH_KEY = "noya:lastPath";
 
-/** Ref module-level pour connecter le callback de drop d'AppContent vers DragDropProvider */
-const _appDropHandler = { current: null as ((items: string[], targetEl: Element) => void) | null };
+/** Ref module-level pour connecter le callback de drop d'AppContent vers DragDropProvider.
+ *  Le booléen `copy` indique que Ctrl/Cmd était maintenu (copie au lieu de déplacement). */
+const _appDropHandler = { current: null as ((items: string[], targetEl: Element, copy: boolean) => void) | null };
 
 /** Met en évidence les parties correspondantes d'un texte */
 function highlightMatch(text: string, query: string): React.ReactNode {
@@ -78,6 +80,28 @@ function highlightMatch(text: string, query: string): React.ReactNode {
       {text.slice(idx + query.length)}
     </>
   );
+}
+
+/** Retourne un chemin cible qui n'existe pas encore (ajoute « (n) » au nom si besoin). */
+async function uniqueTargetPath(dir: string, name: string): Promise<string> {
+  const exists = async (p: string): Promise<boolean> => {
+    try {
+      await invoke("get_file_info", { path: p });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let candidate = joinPath(dir, name);
+  let i = 1;
+  while (await exists(candidate)) {
+    const dot = name.lastIndexOf(".");
+    const ext = dot > 0 ? name.slice(dot) : "";
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    candidate = joinPath(dir, `${base} (${i})${ext}`);
+    i++;
+  }
+  return candidate;
 }
 
 type DialogState =
@@ -149,6 +173,14 @@ function AppContent() {
 
   // Dialogs
   const [dialog, setDialog] = useState<DialogState>(null);
+
+  // Drag & drop externe : fichiers glissés depuis le gestionnaire de fichiers OS
+  const [externalDragPaths, setExternalDragPaths] = useState<string[] | null>(null);
+  // Refs pour accéder aux valeurs courantes depuis l'abonnement onDragDropEvent
+  const currentPathRef = useRef<string | null>(currentPath);
+  currentPathRef.current = currentPath;
+  const currentViewRef = useRef<AppView>(currentView);
+  currentViewRef.current = currentView;
 
   /** Charge les spaces depuis le backend */
   const loadSpaces = useCallback(async () => {
@@ -499,16 +531,6 @@ function AppContent() {
     [t],
   );
 
-  /** Gestion du drag-and-drop depuis la liste de fichiers vers la sidebar. */
-  const handleDropToSidebar = useCallback(
-    async (path: string) => {
-      const name = path.split(/[\\/]/).pop() || path;
-      const isDir = !name.includes(".") || name.endsWith("/");
-      await addFavorite({ path, name, isDir });
-    },
-    [addFavorite],
-  );
-
   /** Drop d'un dossier vers un Space */
   const handleDropToSpace = useCallback(
     async (spaceId: string, folder: string) => {
@@ -525,22 +547,57 @@ function AppContent() {
     [],
   );
 
-  /** Gestion interne du drop depuis le système custom DragDropProvider */
-  const handleInternalDrop = useCallback((items: string[], targetEl: Element) => {
-    const targetType = targetEl.getAttribute("data-drop-target");
-    if (targetType === "favorites") {
-      items.forEach((path) => {
-        const name = path.split(/[\\/]/).pop() || path;
-        const isDir = !name.includes(".") || path.endsWith("/") || path.endsWith("\\");
-        addFavorite({ path, name, isDir });
-      });
-    } else if (targetType === "space") {
-      const spaceId = targetEl.getAttribute("data-space-id");
-      if (spaceId && items.length > 0) {
-        handleDropToSpace(spaceId, items[0]);
+  /**
+   * Gestion interne du drop depuis le système custom DragDropProvider.
+   * `copy` est vrai si l'utilisateur maintenait Ctrl/Cmd au moment du relâchement
+   * (copie au lieu de déplacement — uniquement pertinent pour la cible "folder").
+   */
+  const handleInternalDrop = useCallback(
+    async (items: string[], targetEl: Element, copy: boolean) => {
+      const targetType = targetEl.getAttribute("data-drop-target");
+      if (targetType === "favorites") {
+        items.forEach((path) => {
+          const name = path.split(/[\\/]/).pop() || path;
+          const isDir = !name.includes(".") || path.endsWith("/") || path.endsWith("\\");
+          addFavorite({ path, name, isDir });
+        });
+      } else if (targetType === "space") {
+        const spaceId = targetEl.getAttribute("data-space-id");
+        if (spaceId && items.length > 0) {
+          handleDropToSpace(spaceId, items[0]);
+        }
+      } else if (targetType === "folder") {
+        // Déplacer/copier des entrées dans un dossier cible.
+        const folderPath = targetEl.getAttribute("data-folder-path");
+        if (!folderPath) return;
+        for (const src of items) {
+          // Ne pas déplacer un dossier dans lui-même.
+          if (src === folderPath) continue;
+          // L'entrée est déjà dans le dossier cible : rien à faire.
+          const parent = parentPath(src);
+          if (parent && parent === folderPath) continue;
+          const name = src.split(/[\\/]/).pop() || src;
+          const dst = joinPath(folderPath, name);
+          try {
+            if (copy) {
+              await invoke("copy_entry", { src, dst });
+            } else {
+              await invoke("move_entry", { src, dst });
+            }
+          } catch (e) {
+            setError(`${t("error.paste")} ${name} : ${e}`);
+          }
+        }
+        // Rafraîchit le dossier courant pour refléter le déplacement/copie.
+        // On utilise currentPathRef + loadDirectory (définis plus haut) plutôt
+        // que `refresh` (défini plus bas) pour éviter une référence avant
+        // déclaration (temporal dead zone).
+        const cur = currentPathRef.current;
+        if (cur) void loadDirectory(cur);
       }
-    }
-  }, [addFavorite, handleDropToSpace]);
+    },
+    [addFavorite, handleDropToSpace, loadDirectory, t],
+  );
 
   // Enregistre le handler dans la ref module-level pour DragDropProvider
   useEffect(() => {
@@ -693,6 +750,62 @@ function AppContent() {
   const refresh = useCallback(() => {
     if (currentPath) void loadDirectory(currentPath);
   }, [currentPath, loadDirectory]);
+
+  /** Copie les fichiers déposés depuis l'OS vers le dossier courant de la vue Fichiers. */
+  const handleExternalDrop = useCallback(
+    async (paths: string[]) => {
+      const target = currentPathRef.current;
+      if (currentViewRef.current !== "files" || !target) return;
+      for (const src of paths) {
+        const name = src.split(/[\\/]/).pop() || "fichier";
+        try {
+          const dst = await uniqueTargetPath(target, name);
+          await invoke("copy_entry", { src, dst });
+        } catch (e) {
+          setError(`Échec de la copie de « ${name} » : ${e}`);
+        }
+      }
+      refresh();
+    },
+    [refresh],
+  );
+
+  // Ref pour appeler le handler sans ré-souscrire onDragDropEvent à chaque render
+  const handleExternalDropRef = useRef(handleExternalDrop);
+  handleExternalDropRef.current = handleExternalDrop;
+
+  // Écoute les fichiers déposés depuis l'extérieur (gestionnaire de fichiers OS).
+  // Fonctionne sur Linux (WebKitGTK), Windows (WebView2) et macOS (WKWebView)
+  // grâce à l'API native onDragDropEvent de Tauri.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const un = await getCurrentWebview().onDragDropEvent((event) => {
+          const payload = event.payload;
+          if (payload.type === "enter") {
+            setExternalDragPaths(payload.paths);
+          } else if (payload.type === "drop") {
+            setExternalDragPaths(null);
+            handleExternalDropRef.current?.(payload.paths);
+          } else if (payload.type === "leave") {
+            setExternalDragPaths(null);
+          }
+        });
+        if (cancelled) un();
+        else unlisten = un;
+      } catch (e) {
+        console.error("onDragDropEvent unavailable:", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   const handleCreateDir = useCallback(
     async (name: string) => {
@@ -1020,7 +1133,6 @@ function AppContent() {
         analyzing={analyzing}
         canAnalyze={!!currentPath}
         onRemoveFavorite={(p) => void removeFavorite(p)}
-        onDropToSidebar={(p) => void handleDropToSidebar(p)}
         onNavigateView={(v) => navigateView(v)}
         onOpenSpace={(id) => openSpace(id)}
         onCreateSpace={() => {
@@ -1039,7 +1151,6 @@ function AppContent() {
             setError(`Impossible de supprimer l'espace : ${e}`);
           }
         }}
-        onDropToSpace={(spaceId, folder) => void handleDropToSpace(spaceId, folder)}
       />
 
       <div className="main-area">
@@ -1147,9 +1258,9 @@ function AppContent() {
                         key={r.path}
                         className="search-result-item"
                         onClick={() => {
-                          const parent = parentPath(r.path);
-                          if (parent) void navigateTo(r.path);
-                          else if (!r.is_dir) {
+                          if (r.isDir) {
+                            void navigateTo(r.path);
+                          } else {
                             const p = parentPath(r.path);
                             if (p) void navigateTo(p);
                           }
@@ -1157,11 +1268,11 @@ function AppContent() {
                           setSearchResults([]);
                         }}
                         onDoubleClick={() => {
-                          if (!r.is_dir) void invoke("open_file", { path: r.path });
+                          if (!r.isDir) void invoke("open_file", { path: r.path });
                         }}
                       >
                         <span className="search-result-icon">
-                          {r.is_dir ? <FolderOpen size={14} /> : <FileText size={14} />}
+                          {r.isDir ? <FolderOpen size={14} /> : <FileText size={14} />}
                         </span>
                         <div className="search-result-info">
                           <span className="search-result-name">{highlightMatch(r.name, search)}</span>
@@ -1448,17 +1559,38 @@ function AppContent() {
             }}
           />
         )}
+
+        {/* ---------- Overlay de drop externe ---------- */}
+        {externalDragPaths &&
+          externalDragPaths.length > 0 &&
+          currentView === "files" &&
+          currentPath && (
+            <div className="external-drop-overlay">
+              <div className="external-drop-overlay-inner">
+                <span className="external-drop-overlay-icon">
+                  <Copy size={22} />
+                </span>
+                <span className="external-drop-overlay-title">
+                  {t("drop.copy_into")} {currentPath}
+                </span>
+                <span className="external-drop-overlay-hint">
+                  {t("drop.copy_hint")}
+                </span>
+              </div>
+            </div>
+          )}
       </div>
     </main>
   );
 }
 
 export default function App() {
-  const handleInternalDrop = useCallback((items: string[], targetEl: Element) => {
-    if (_appDropHandler.current) {
-      _appDropHandler.current(items, targetEl);
-    }
-  }, []);
+  const handleInternalDrop = useCallback(
+    (items: string[], targetEl: Element, copy: boolean) => {
+      _appDropHandler.current?.(items, targetEl, copy);
+    },
+    [],
+  );
 
   return (
     <ThemeProvider>

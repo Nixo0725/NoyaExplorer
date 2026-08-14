@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "noya-explorer",
-  "version": "0.2.1",
+  "version": "0.1.0",
   "identifier": "com.robin.noya-explorer",
   "build": {
     "beforeDevCommand": "npm run dev",

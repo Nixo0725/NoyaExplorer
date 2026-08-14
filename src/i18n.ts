@@ -52,6 +52,7 @@ const FR: Record<string, string> = {
   /* ---------- Sidebar ---------- */
   "sidebar.quick_access": "Accès rapide",
   "sidebar.home": "Accueil",
+  "sidebar.dashboard": "Tableau de bord",
   "sidebar.desktop": "Bureau",
   "sidebar.documents": "Documents",
   "sidebar.downloads": "Téléchargements",
@@ -76,7 +77,6 @@ const FR: Record<string, string> = {
   "settings.theme_light": "Clair",
   "settings.theme_dark": "Sombre",
   "settings.language": "Langue",
-  "settings.mode_english": "Mode anglais",
   "settings.mode_english_desc":
     "Afficher l'interface en anglais au lieu du français.",
 
@@ -91,6 +91,11 @@ const FR: Record<string, string> = {
   "context.new_folder": "Nouveau dossier",
   "context.new_file": "Nouveau fichier",
   "context.paste": "Coller",
+
+  /* ---------- Drag & drop ---------- */
+  "drag.move_to": "Déplacer vers",
+  "drag.copy_to": "Copier vers",
+  "drag.items": "éléments",
 
   /* ---------- Dialog ---------- */
   "dialog.cancel": "Annuler",
@@ -161,12 +166,10 @@ const FR: Record<string, string> = {
   "spaces.create": "Créer un espace",
   "spaces.rename": "Renommer",
   "spaces.delete": "Supprimer",
-  "spaces.delete_confirm": 'Supprimer l\'espace "{name}" ?',
   "spaces.name_placeholder": "Nom de l'espace",
   "spaces.icon": "Icône",
   "spaces.add_folder": "Ajouter un dossier",
   "spaces.remove_folder": "Retirer le dossier",
-  "spaces.open": "Ouvrir l'espace",
   "spaces.no_folders": "Aucun dossier ajouté.",
   "spaces.source_folder": "Dossier source",
   "spaces.drag_hint": "Glissez des dossiers ici pour les ajouter",
@@ -186,9 +189,6 @@ const FR: Record<string, string> = {
   "filters.old_only": "Fichiers anciens (1 an)",
   "filters.large_only": "Gros fichiers (>100 Mo)",
   "filters.clear": "Effacer les filtres",
-  "filters.apply": "Appliquer",
-  "filters.count": "{count} résultat(s)",
-  "filters.no_match": "Aucun fichier ne correspond aux filtres.",
 
   /* ---------- Biggest files ---------- */
   "biggest_files.title": "Plus gros fichiers",
@@ -202,7 +202,6 @@ const FR: Record<string, string> = {
   "biggest_files.modified": "Modifié",
   "biggest_files.open": "Ouvrir",
   "biggest_files.open_containing": "Ouvrir le dossier contenant",
-  "biggest_files.properties": "Propriétés",
   "biggest_files.delete": "Supprimer",
   "biggest_files.delete_confirm": 'Supprimer "{name}" ?',
   "biggest_files.empty": "Aucun fichier trouvé. Cliquez sur Analyser pour lancer le scan.",
@@ -221,7 +220,6 @@ const FR: Record<string, string> = {
   "biggest_folders.navigate": "Ouvrir le dossier",
   "biggest_folders.empty": "Aucun dossier trouvé. Cliquez sur Analyser pour lancer le scan.",
   "biggest_folders.select_source": "Sélectionnez un disque",
-  "biggest_folders.recursive": "Analyse récursive",
   "biggest_folders.progress": "Analyse en cours… {count} dossiers trouvés",
 
   /* ---------- Storage insights ---------- */
@@ -296,6 +294,7 @@ const EN: Record<string, string> = {
 
   "sidebar.quick_access": "Quick access",
   "sidebar.home": "Home",
+  "sidebar.dashboard": "Dashboard",
   "sidebar.desktop": "Desktop",
   "sidebar.documents": "Documents",
   "sidebar.downloads": "Downloads",
@@ -319,7 +318,6 @@ const EN: Record<string, string> = {
   "settings.theme_light": "Light",
   "settings.theme_dark": "Dark",
   "settings.language": "Language",
-  "settings.mode_english": "English mode",
   "settings.mode_english_desc":
     "Display the interface in English instead of French.",
 
@@ -333,6 +331,11 @@ const EN: Record<string, string> = {
   "context.new_folder": "New folder",
   "context.new_file": "New file",
   "context.paste": "Paste",
+
+  /* ---------- Drag & drop ---------- */
+  "drag.move_to": "Move to",
+  "drag.copy_to": "Copy to",
+  "drag.items": "items",
 
   "dialog.cancel": "Cancel",
   "dialog.new_folder_title": "New folder",
@@ -399,12 +402,10 @@ const EN: Record<string, string> = {
   "spaces.create": "Create space",
   "spaces.rename": "Rename",
   "spaces.delete": "Delete",
-  "spaces.delete_confirm": 'Delete space "{name}" ?',
   "spaces.name_placeholder": "Space name",
   "spaces.icon": "Icon",
   "spaces.add_folder": "Add folder",
   "spaces.remove_folder": "Remove folder",
-  "spaces.open": "Open space",
   "spaces.no_folders": "No folders added.",
   "spaces.source_folder": "Source folder",
   "spaces.drag_hint": "Drag folders here to add them",
@@ -424,9 +425,6 @@ const EN: Record<string, string> = {
   "filters.old_only": "Old files (1 year)",
   "filters.large_only": "Large files (>100 MB)",
   "filters.clear": "Clear filters",
-  "filters.apply": "Apply",
-  "filters.count": "{count} result(s)",
-  "filters.no_match": "No files match the filters.",
 
   /* ---------- Biggest files ---------- */
   "biggest_files.title": "Biggest Files",
@@ -440,7 +438,6 @@ const EN: Record<string, string> = {
   "biggest_files.modified": "Modified",
   "biggest_files.open": "Open",
   "biggest_files.open_containing": "Open containing folder",
-  "biggest_files.properties": "Properties",
   "biggest_files.delete": "Delete",
   "biggest_files.delete_confirm": 'Delete "{name}" ?',
   "biggest_files.empty": "No files found. Click Scan to start.",
@@ -459,7 +456,6 @@ const EN: Record<string, string> = {
   "biggest_folders.navigate": "Open folder",
   "biggest_folders.empty": "No folders found. Click Scan to start.",
   "biggest_folders.select_source": "Select a drive",
-  "biggest_folders.recursive": "Recursive analysis",
   "biggest_folders.progress": "Scanning… {count} folders found",
 
   /* ---------- Storage insights ---------- */

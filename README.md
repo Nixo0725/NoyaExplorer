@@ -160,14 +160,14 @@ The project uses:
 * Tauri
 * TypeScript
 * React
-* Tailwind CSS
+* CSS personnalisé (variables CSS, thèmes clair/sombre)
 
 I chose this stack because:
 
 * Rust is fast and reliable for file system operations
 * Tauri allows me to build a lightweight desktop app
 * React and TypeScript are good for building a modern interface
-* Tailwind CSS helps me move faster on the design
+* Le CSS personnalisé avec variables permet un système de thèmes clair/sombre léger et rapide
 
 # Roadmap
 

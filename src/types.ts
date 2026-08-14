@@ -106,7 +106,7 @@ export type Language = "fr" | "en";
 export interface SearchResult {
   path: string;
   name: string;
-  is_dir: boolean;
+  isDir: boolean;
   context: string | null;
   score: number;
 }
