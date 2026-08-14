@@ -2240,6 +2240,15 @@ body {
   user-select: none;
   /* Léger décalage vers le haut pour donner un effet de "flottant" */
   transform: translateY(-2px);
+  /* Masqué par défaut — la visibilité est contrôlée par la classe
+     body.dnd-active (gérée synchroniquement par DragDropProvider),
+     ce qui bypass le batching React et garantit que la carte
+     disparaît immédiatement au relâchement du drag. */
+  display: none;
+}
+
+body.dnd-active .drag-preview {
+  display: block;
 }
 
 /* Carte principale : icône + nom du fichier, semi-transparente */

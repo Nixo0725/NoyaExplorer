@@ -69,6 +69,10 @@ interface DragDropProviderProps {
 
 export function DragDropProvider({ children, onDrop }: DragDropProviderProps) {
   const [state, setState] = useState<DragDropState>(INITIAL_STATE);
+  // Compteur incrémenté à chaque endDrag pour forcer un re-render du
+  // Provider (et donc des consommateurs du contexte comme DragPreview),
+  // même si le setState principal ne déclenche pas de re-render.
+  const [, setTick] = useState(0);
   const isDraggingRef = useRef(false);
 
   // Ref pour la position du curseur (évite de dépendre du state React)
@@ -168,11 +172,16 @@ export function DragDropProvider({ children, onDrop }: DragDropProviderProps) {
     }
 
     const copy = e.ctrlKey || e.metaKey;
-    if (dropTarget && onDropRef.current) {
-      onDropRef.current(itemsRef.current, dropTarget, copy);
+    // try/finally : garantit que endDrag est TOUJOURS appelé, même si
+    // le callback onDrop lève une exception. Sans cela, l'animation
+    // (bulle + curseur grabbing) resterait affichée après le drop.
+    try {
+      if (dropTarget && onDropRef.current) {
+        onDropRef.current(itemsRef.current, dropTarget, copy);
+      }
+    } finally {
+      endDragRef.current();
     }
-
-    endDragRef.current();
   }, []);
 
   const handlePointerCancel = useCallback(() => {
@@ -187,6 +196,8 @@ export function DragDropProvider({ children, onDrop }: DragDropProviderProps) {
   }, []);
 
   const endDrag = useCallback(() => {
+    if (!isDraggingRef.current) return; // évite double-reset + boucle
+    console.debug("[DnD] endDrag; isDragging=", isDraggingRef.current);
     isDraggingRef.current = false;
     itemsRef.current = [];
     hoveredRef.current = null;
@@ -202,6 +213,10 @@ export function DragDropProvider({ children, onDrop }: DragDropProviderProps) {
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
     document.body.style.touchAction = "";
+    // Retire la classe CSS qui contrôle la visibilité de la prévisualisation.
+    // C'est fait de manière synchrone (pas de batching React) → la carte
+    // disparaît immédiatement, même si le setState est différé.
+    document.body.classList.remove("dnd-active");
 
     // Détache les listeners (no-op si non attachés)
     window.removeEventListener("pointermove", handlePointerMove, true);
@@ -209,7 +224,16 @@ export function DragDropProvider({ children, onDrop }: DragDropProviderProps) {
     window.removeEventListener("pointercancel", handlePointerCancel, true);
     window.removeEventListener("keydown", handleKeyDown, true);
 
-    setState(INITIAL_STATE);
+    // Objet frais (pas la constante INITIAL_STATE) pour garantir que
+    // React détecte un changement de référence et déclenche un re-render.
+    setState({ ...INITIAL_STATE });
+    // Force un re-render du Provider (et donc des consommateurs du contexte)
+    // en incrémentant un compteur indépendant. C'est le filet de sécurité
+    // ultime : même si le setState ci-dessus ne déclenche pas de re-render
+    // (problème de batching React 19 dans le WebView Tauri), le setTick
+    // garantit que le Provider re-render et que la nouvelle valeur du
+    // contexte (avec state.isDragging = false) est propagée.
+    setTick((t) => t + 1);
   }, [handlePointerMove, handlePointerUp, handlePointerCancel, handleKeyDown]);
 
   endDragRef.current = endDrag;
@@ -248,6 +272,10 @@ export function DragDropProvider({ children, onDrop }: DragDropProviderProps) {
       document.body.style.cursor = "grabbing";
       document.body.style.userSelect = "none";
       document.body.style.touchAction = "none";
+      // Classe CSS sur le body pour contrôler la visibilité de la
+      // prévisualisation (plus fiable que le state React — bypass
+      // le batching et garantit que la carte disparaît au relâchement).
+      document.body.classList.add("dnd-active");
 
       // Démarre l'auto-scroll piloté par Pointer Events
       startAutoScroll();

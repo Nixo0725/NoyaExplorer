@@ -15,7 +15,11 @@ export default function DragPreview() {
   const { state } = useDragDropContext();
   const { t } = useLanguage();
 
-  if (!state.isDragging || state.items.length === 0) return null;
+  // La visibilité est contrôlée par la classe CSS body.dnd-active (gérée
+  // par DragDropProvider) plutôt que par state.isDragging — c'est plus
+  // fiable car le toggle CSS est synchrone (pas de batching React).
+  // On ne rend rien s'il n'y a pas d'items à afficher.
+  if (state.items.length === 0) return null;
 
   // Nom du premier élément (dernier segment du chemin)
   const firstPath = state.items[0];

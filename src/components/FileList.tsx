@@ -112,6 +112,18 @@ function FileList({
     const handlePointerMove = (e: PointerEvent) => {
       const start = dragStartPos.current;
       if (!start.entry) return;
+      // Si un drag a eu lieu (didDragRef = true) mais que le drag est
+      // terminé (state.isDragging = false), cela signifie que
+      // handlePointerUp n'a pas nettoyé dragStartPos. On nettoie
+      // manuellement pour éviter de relancer un drag avec l'ancien
+      // fichier quand l'utilisateur rebouge la souris.
+      if (didDragRef.current && !state.isDragging) {
+        dragStartPos.current = {
+          x: 0, y: 0, entry: null, pointerId: -1, element: null,
+        };
+        didDragRef.current = false;
+        return;
+      }
       if (state.isDragging) return;
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
