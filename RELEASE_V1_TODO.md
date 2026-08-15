@@ -1,48 +1,28 @@
-# Reprise release v1.0.0 — (moins de 10 min)
+# Reprise release v1.0.0 — état : CI relancé ✅
 
-> Tout le code est terminé et poussé. Il reste UN blocage à corriger + la publication.
+> Le blocage (fichier `test2.txt`) est **corrigé** et le build a été relancé.
 
-## 1. Supprimer le fichier qui casse le build Windows (2 min)
+## Ce qui a été fait (terminé)
+- ✅ Fichier `src-tauri/\home\nixo\Desktop\test2.txt` supprimé du dépôt git et du disque
+  (commit `e6f164d`)
+- ✅ `main` poussé sur `origin` (`6e5402b..e6f164d`)
+- ✅ Tag `v1.0.0` redéplacé sur le commit corrigé + force push
+  → le workflow « Build Release » tourne sur `e6f164d2` (vérifié via API GitHub)
 
-Le fichier `src-tauri/\home\nixo\Desktop\test2.txt` (nom avec backslashes, résidu de test)
-fait échouer le checkout sur Windows (`invalid path`).
+## Il reste à faire
 
-```bash
-git rm --cached "src-tauri/\\home\\nixo\\Desktop\\test2.txt"
-find src-tauri -maxdepth 1 -name '*test2*' -delete
-git commit -m "fix: supprime le fichier de test invalide (bloquait le checkout Windows)"
-git push origin main
-```
+### 1. Attendre le build (~15-25 min)
+GitHub → **Actions** → « Build Release » → 4 jobs en parallèle :
+- windows-latest → `setup.exe` + `.msi`
+- ubuntu-22.04 → `.deb` + `.AppImage`
+- macos-latest x2 → `.dmg` (Intel + Apple Silicon)
 
-## 2. Redéplacer le tag v1.0.0 sur le commit corrigé (2 min)
-
-Le tag pointe encore vers le commit cassé → le déplacer force la relance du CI.
-
-```bash
-git tag -f v1.0.0
-git push origin v1.0.0 --force
-```
-
-## 3. Attendre le build puis publier (5 min)
-
-1. GitHub → **Actions** → « Build Release » → 4 jobs en parallèle (~15-25 min) :
-   - windows-latest → `setup.exe` + `.msi`
-   - ubuntu-22.04 → `.deb` + `.AppImage`
-   - macos-latest x2 → `.dmg` (Intel + Apple Silicon)
-2. GitHub → **Releases** → « Noya Explorer v1.0.0 » (brouillon) → vérifier les assets
-   → **Publish release**.
+### 2. Publier la release
+GitHub → **Releases** → « Noya Explorer v1.0.0 » (brouillon) → vérifier les assets
+→ **Publish release**.
 
 ## Bonus (si le temps le permet)
-
-- **README** : à réécrire (fonctionnalités réelles + captures + install).
-- **Avertissements CI « Node.js 20 deprecated »** : sans impact sur le build, ignorables.
-- Les binaires ne sont **pas signés** (SmartScreen Windows + « développeur non identifié » macOS) :
+- **README** à réécrire (fonctionnalités réelles + captures + install).
+- Avertissements CI « Node.js 20 deprecated » : sans impact, ignorables.
+- Binaires non signés (SmartScreen Windows + « développeur non identifié » macOS) :
   normal pour une v1.
-
-## Récap état actuel (tout est DÉJÀ fait)
-
-- 7 features implémentées, analyse globale en cache, sidebar réorganisée, Spaces retiré,
-  code mort nettoyé, correctifs symlinks + chemins Unix
-- `cargo check` 0 warning / 0 erreur, `npx tsc --noEmit` OK
-- Commit `6e5402b` + tag `v1.0.0` poussés sur `origin` (Nixo0725/NoyaExplorer)
-- Workflow CI créé (`.github/workflows/release.yml`)
