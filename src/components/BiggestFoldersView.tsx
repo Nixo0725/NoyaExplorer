@@ -1,16 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { HardDrive, Search, FolderOpen } from "lucide-react";
-import type { BiggestFolder, DriveInfo } from "../types";
+import { useState, useMemo } from "react";
+import { HardDrive, RefreshCw, FolderOpen } from "lucide-react";
+import type { BiggestFolder } from "../types";
 import { formatSize } from "../lib/format";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useAnalysis } from "../contexts/AnalysisContext";
 
 /* ---------- Types internes ---------- */
 
 type SortKey = "name" | "path" | "totalSize" | "fileCount";
 type SortDir = "asc" | "desc";
 
-const LIMIT_OPTIONS = [10, 50, 100, 500] as const;
+const LIMIT_OPTIONS = [10, 50, 100] as const;
 
 /* ---------- Composant ---------- */
 
@@ -22,67 +22,20 @@ interface BiggestFoldersViewProps {
 /**
  * Page "Plus gros dossiers".
  *
- * Props :
- *  - `onNavigate` : appelée au double‑clic sur une ligne ou au clic sur le
- *    bouton "Ouvrir" pour naviguer vers le dossier.
- *
- * Gère son propre état :
- *  - Liste des disques récupérée via `invoke("list_drives")`
- *  - Choix du Top N
- *  - Appel à `invoke("get_biggest_folders")`
- *  - Tri par colonne
- *  - Indicateur de progression pendant le scan
+ * Utilise l'analyse globale mise en cache (`AnalysisContext`) : aucun choix
+ * de disque n'est nécessaire. Le Top N est appliqué côté client.
  */
 function BiggestFoldersView({ onNavigate }: BiggestFoldersViewProps) {
   const { t } = useLanguage();
+  const { analysis, loading, refreshing, error, refresh } = useAnalysis();
 
   /* ---------- État ---------- */
 
-  const [drives, setDrives] = useState<DriveInfo[]>([]);
-  const [selectedDrive, setSelectedDrive] = useState<string>("");
   const [limit, setLimit] = useState<number>(100);
-  const [folders, setFolders] = useState<BiggestFolder[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("totalSize");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  /* ---------- Chargement des disques ---------- */
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const result = await invoke<DriveInfo[]>("list_drives");
-        setDrives(result);
-        if (result.length > 0) {
-          setSelectedDrive(result[0].path);
-        }
-      } catch (err) {
-        setError(String(err));
-      }
-    })();
-  }, []);
-
-  /* ---------- Analyse ---------- */
-
-  const handleAnalyze = async () => {
-    if (!selectedDrive) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await invoke<BiggestFolder[]>("get_biggest_folders", {
-        path: selectedDrive,
-        limit,
-        maxDepth: 12,
-      });
-      setFolders(result);
-    } catch (err) {
-      setError(String(err));
-      setFolders([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const folders: BiggestFolder[] = analysis?.biggestFolders ?? [];
 
   /* ---------- Tri ---------- */
 
@@ -98,28 +51,30 @@ function BiggestFoldersView({ onNavigate }: BiggestFoldersViewProps) {
 
   const sorted = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
-    return [...folders].sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "name":
+    return [...folders]
+      .sort((a, b) => {
+        let cmp = 0;
+        switch (sortKey) {
+          case "name":
+            cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+            break;
+          case "path":
+            cmp = a.path.toLowerCase().localeCompare(b.path.toLowerCase());
+            break;
+          case "totalSize":
+            cmp = a.totalSize - b.totalSize;
+            break;
+          case "fileCount":
+            cmp = a.fileCount - b.fileCount;
+            break;
+        }
+        if (cmp === 0) {
           cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-          break;
-        case "path":
-          cmp = a.path.toLowerCase().localeCompare(b.path.toLowerCase());
-          break;
-        case "totalSize":
-          cmp = a.totalSize - b.totalSize;
-          break;
-        case "fileCount":
-          cmp = a.fileCount - b.fileCount;
-          break;
-      }
-      if (cmp === 0) {
-        cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-      }
-      return cmp * dir;
-    });
-  }, [folders, sortKey, sortDir]);
+        }
+        return cmp * dir;
+      })
+      .slice(0, limit);
+  }, [folders, sortKey, sortDir, limit]);
 
   /* ---------- Navigation ---------- */
 
@@ -137,22 +92,12 @@ function BiggestFoldersView({ onNavigate }: BiggestFoldersViewProps) {
 
         {/* Barre d'outils */}
         <div className="toolbar">
-          {/* Sélecteur de disque */}
-          <select
-            className="drive-select"
-            value={selectedDrive}
-            onChange={(e) => setSelectedDrive(e.target.value)}
-            disabled={loading}
-          >
-            {drives.length === 0 && (
-              <option value="">{t("biggest_folders.select_source")}</option>
-            )}
-            {drives.map((drive) => (
-              <option key={drive.path} value={drive.path}>
-                {drive.label || drive.letter} ({drive.path})
-              </option>
-            ))}
-          </select>
+          {analysis && (
+            <span className="ghost-btn" style={{ cursor: "default" }}>
+              <HardDrive size={14} />
+              <span>{t("analysis.root", { root: analysis.root })}</span>
+            </span>
+          )}
 
           <span className="toolbar-sep" />
 
@@ -162,7 +107,6 @@ function BiggestFoldersView({ onNavigate }: BiggestFoldersViewProps) {
             <select
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
-              disabled={loading}
             >
               {LIMIT_OPTIONS.map((n) => (
                 <option key={n} value={n}>
@@ -172,39 +116,28 @@ function BiggestFoldersView({ onNavigate }: BiggestFoldersViewProps) {
             </select>
           </label>
 
-          {/* Bouton Analyser */}
+          {/* Bouton Actualiser */}
           <button
             className="toolbar-action"
-            onClick={handleAnalyze}
-            disabled={!selectedDrive || loading}
+            onClick={() => void refresh()}
+            disabled={loading || refreshing}
           >
-            <Search size={14} />
-            {loading ? t("biggest_folders.scanning") : t("biggest_folders.scan")}
+            <RefreshCw size={14} />
+            {refreshing ? t("analysis.refreshing") : t("analysis.refresh")}
           </button>
-
-          {/* Compteur de progression */}
-          {loading && folders.length > 0 && (
-            <span className="scan-count">
-              {t("biggest_folders.progress", {
-                count: String(folders.length),
-              })}
-            </span>
-          )}
         </div>
 
         {/* Erreur */}
         {error && <div className="status error">{error}</div>}
 
-        {/* Chargement initial (aucun résultat précédent) */}
-        {loading && folders.length === 0 && (
-          <div className="status">{t("app.loading")}</div>
-        )}
+        {/* Chargement initial */}
+        {loading && <div className="status">{t("analysis.scanning")}</div>}
 
         {/* État vide */}
         {!loading && !error && folders.length === 0 && (
           <div className="status">
             <HardDrive size={32} />
-            <p>{t("biggest_folders.empty")}</p>
+            <p>{t("analysis.empty")}</p>
           </div>
         )}
 
@@ -256,7 +189,9 @@ function BiggestFoldersView({ onNavigate }: BiggestFoldersViewProps) {
                   <span className="file-path" title={folder.path}>
                     {folder.path}
                   </span>
-                  <span className="file-size">{formatSize(folder.totalSize)}</span>
+                  <span className="file-size">
+                    {formatSize(folder.totalSize)}
+                  </span>
                   <span className="file-count">
                     {folder.fileCount.toLocaleString()}
                   </span>

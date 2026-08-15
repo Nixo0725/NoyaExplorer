@@ -58,6 +58,17 @@ fn matches_filters(
         }
     }
 
+    // Filtre emplacement : préfixe du chemin complet, insensible à la casse
+    if let Some(ref loc) = filters.location {
+        if !loc.is_empty() {
+            let path_lower = path.to_string_lossy().to_lowercase();
+            let loc_lower = loc.to_lowercase();
+            if !path_lower.starts_with(&loc_lower) {
+                return false;
+            }
+        }
+    }
+
     // Time filters
     if let Ok(modified) = metadata.modified() {
         let mod_ms = modified
@@ -125,6 +136,29 @@ fn matches_filters(
                 }
             }
         } else {
+            return false;
+        }
+    }
+
+    // Unused files: neither accessed nor modified for over 365 days.
+    // Si accessed() n'est pas disponible (Linux), on se rabat sur modified() seul.
+    if filters.unused_only.unwrap_or(false) {
+        let now = SystemTime::now();
+        let accessed_old = match metadata.accessed() {
+            Ok(accessed) => now
+                .duration_since(accessed)
+                .map(|d| d.as_secs() >= 365 * 24 * 3600)
+                .unwrap_or(false),
+            // accessed() indisponible : seul le critère modified() compte
+            Err(_) => true,
+        };
+        let modified_old = metadata
+            .modified()
+            .ok()
+            .and_then(|m| now.duration_since(m).ok())
+            .map(|d| d.as_secs() >= 365 * 24 * 3600)
+            .unwrap_or(false);
+        if !accessed_old || !modified_old {
             return false;
         }
     }

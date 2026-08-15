@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Home,
   Monitor,
@@ -10,10 +11,13 @@ import {
   X,
   LayoutDashboard,
   FolderKanban,
-  Layers,
-  Plus,
+  ShieldAlert,
+  PieChart,
+  ChevronUp,
+  ChevronDown,
+  Search,
 } from "lucide-react";
-import type { SpecialDir, DriveInfo, FavoriteItem, Space, AppView } from "../types";
+import type { SpecialDir, DriveInfo, FavoriteItem, AppView } from "../types";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useDragDropContext } from "./DragDropProvider";
 
@@ -22,10 +26,8 @@ interface SidebarProps {
   specialDirs: SpecialDir[];
   drives: DriveInfo[];
   favorites: FavoriteItem[];
-  spaces: Space[];
   currentPath: string | null;
   currentView: AppView;
-  currentSpaceId: string | null;
   onNavigate: (path: string) => void;
   onOpenHome: () => void;
   onOpenSettings: () => void;
@@ -34,9 +36,6 @@ interface SidebarProps {
   canAnalyze: boolean;
   onRemoveFavorite: (path: string) => void;
   onNavigateView: (view: AppView) => void;
-  onOpenSpace: (id: string) => void;
-  onCreateSpace: () => void;
-  onDeleteSpace: (id: string) => void;
 }
 
 /** Mapping des labels des dossiers spéciaux système vers les clés de traduction */
@@ -59,32 +58,13 @@ function specialDirIcon(label: string) {
   return <Folder size={16} />;
 }
 
-/** Icons disponibles pour les Spaces */
-const SPACE_ICONS: Record<string, React.ReactNode> = {
-  folder: <Folder size={16} />,
-  code: <FileText size={16} />,
-  gamepad: <Monitor size={16} />,
-  image: <FileText size={16} />,
-  music: <FileText size={16} />,
-  video: <FileText size={16} />,
-  book: <FileText size={16} />,
-  archive: <FileText size={16} />,
-  default: <Layers size={16} />,
-};
-
-function spaceIcon(icon: string) {
-  return SPACE_ICONS[icon] ?? SPACE_ICONS.default;
-}
-
 function Sidebar({
   homePath,
   specialDirs,
   drives,
   favorites,
-  spaces,
   currentPath,
   currentView,
-  currentSpaceId,
   onNavigate,
   onOpenHome,
   onOpenSettings,
@@ -93,12 +73,21 @@ function Sidebar({
   canAnalyze,
   onRemoveFavorite,
   onNavigateView,
-  onOpenSpace,
-  onCreateSpace,
-  onDeleteSpace,
 }: SidebarProps) {
   const { t } = useLanguage();
   const { state: dndState } = useDragDropContext();
+
+  // Menu dépliant « Analyser » du pied de sidebar (s'ouvre vers le haut)
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
+
+  const handleAnalyzeToggle = () => {
+    setAnalyzeOpen((o) => !o);
+  };
+
+  const handleNavigateAnalysis = (view: AppView) => {
+    setAnalyzeOpen(false);
+    onNavigateView(view);
+  };
 
   // Surlignage des cibles pendant le drag CUSTOM (Pointer Events) :
   // la cible survolée est suivie en direct par le DragDropProvider.
@@ -112,11 +101,6 @@ function Sidebar({
     dndState.isDragging &&
     dndState.hoveredTarget != null &&
     dndState.hoveredTarget.closest("[data-drop-target='favorites']") != null;
-
-  const isDndSpaceHover = (spaceId: string) =>
-    dndState.isDragging &&
-    dndState.hoveredTarget != null &&
-    dndState.hoveredTarget.closest(`[data-space-id="${spaceId}"]`) != null;
 
   const isActive = (path: string) =>
     currentPath !== null &&
@@ -165,41 +149,6 @@ function Sidebar({
           ))}
         </div>
 
-        {/* ---------- Sections d'analyse ---------- */}
-        <div className="sidebar-section">
-          <div className="sidebar-title">{t("sidebar.analyze")}</div>
-          <button
-            className={`sidebar-item ${isViewActive("biggest-files") ? "active" : ""}`}
-            onClick={() => onNavigateView("biggest-files")}
-            title={t("biggest_files.title")}
-          >
-            <span className="sidebar-icon">
-              <LayoutDashboard size={16} />
-            </span>
-            <span className="sidebar-label">{t("biggest_files.title")}</span>
-          </button>
-          <button
-            className={`sidebar-item ${isViewActive("biggest-folders") ? "active" : ""}`}
-            onClick={() => onNavigateView("biggest-folders")}
-            title={t("biggest_folders.title")}
-          >
-            <span className="sidebar-icon">
-              <FolderKanban size={16} />
-            </span>
-            <span className="sidebar-label">{t("biggest_folders.title")}</span>
-          </button>
-          <button
-            className={`sidebar-item ${isViewActive("insights") ? "active" : ""}`}
-            onClick={() => onNavigateView("insights")}
-            title={t("insights.title")}
-          >
-            <span className="sidebar-icon">
-              <BarChart3 size={16} />
-            </span>
-            <span className="sidebar-label">{t("insights.title")}</span>
-          </button>
-        </div>
-
         {/* ---------- Favoris ---------- */}
         <div
           className={`sidebar-section favorites-section ${dndFavoritesHover ? "drag-over" : ""}`}
@@ -237,49 +186,6 @@ function Sidebar({
           ))}
         </div>
 
-        {/* ---------- Spaces ---------- */}
-        <div className="sidebar-section">
-          <div className="sidebar-title sidebar-title-row">
-            <span>{t("spaces.title")}</span>
-            <button
-              className="icon-btn icon-btn-small"
-              onClick={onCreateSpace}
-              title={t("spaces.create")}
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-          {spaces.length === 0 && (
-            <div className="sidebar-favorites-empty">
-              {t("spaces.empty")}
-            </div>
-          )}
-          {spaces.map((space) => (
-            <div
-              key={space.id}
-              className={`sidebar-item sidebar-space ${currentSpaceId === space.id ? "active" : ""} ${isDndSpaceHover(space.id) ? "drag-over" : ""}`}
-              data-drop-target="space"
-              data-space-id={space.id}
-              data-folder-path={space.folders[0] ?? ""}
-              onClick={() => onOpenSpace(space.id)}
-              title={space.name}
-            >
-              <span className="sidebar-icon">{spaceIcon(space.icon)}</span>
-              <span className="sidebar-label">{space.name}</span>
-              <button
-                className="favorite-remove"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteSpace(space.id);
-                }}
-                title={t("spaces.delete")}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-
         {drives.length > 0 && (
           <div className="sidebar-section">
             <div className="sidebar-title">{t("sidebar.this_pc")}</div>
@@ -301,11 +207,11 @@ function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        {canAnalyze && (
+        {/* ---------- Menu dépliant « Analyser » (s'ouvre vers le haut) ---------- */}
+        <div className="sidebar-analyze-menu">
           <button
-            className="sidebar-item"
-            onClick={onAnalyze}
-            disabled={analyzing}
+            className={`sidebar-item ${analyzeOpen ? "active" : ""}`}
+            onClick={handleAnalyzeToggle}
             title={t("sidebar.analyze_title")}
           >
             <span className="sidebar-icon">
@@ -314,8 +220,85 @@ function Sidebar({
             <span className="sidebar-label">
               {analyzing ? t("sidebar.analyzing") : t("sidebar.analyze")}
             </span>
+            <span className="sidebar-chevron">
+              {analyzeOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            </span>
           </button>
-        )}
+
+          {analyzeOpen && (
+            <div className="sidebar-analyze-popover">
+              {canAnalyze && (
+                <button
+                  className="sidebar-item"
+                  onClick={() => {
+                    setAnalyzeOpen(false);
+                    onAnalyze();
+                  }}
+                  disabled={analyzing}
+                  title={t("sidebar.analyze_title")}
+                >
+                  <span className="sidebar-icon">
+                    <Search size={16} />
+                  </span>
+                  <span className="sidebar-label">
+                    {analyzing ? t("sidebar.analyzing") : t("sidebar.analyze_current")}
+                  </span>
+                </button>
+              )}
+              <button
+                className={`sidebar-item ${isViewActive("biggest-files") ? "active" : ""}`}
+                onClick={() => handleNavigateAnalysis("biggest-files")}
+                title={t("biggest_files.title")}
+              >
+                <span className="sidebar-icon">
+                  <LayoutDashboard size={16} />
+                </span>
+                <span className="sidebar-label">{t("biggest_files.title")}</span>
+              </button>
+              <button
+                className={`sidebar-item ${isViewActive("biggest-folders") ? "active" : ""}`}
+                onClick={() => handleNavigateAnalysis("biggest-folders")}
+                title={t("biggest_folders.title")}
+              >
+                <span className="sidebar-icon">
+                  <FolderKanban size={16} />
+                </span>
+                <span className="sidebar-label">{t("biggest_folders.title")}</span>
+              </button>
+              <button
+                className={`sidebar-item ${isViewActive("insights") ? "active" : ""}`}
+                onClick={() => handleNavigateAnalysis("insights")}
+                title={t("insights.title")}
+              >
+                <span className="sidebar-icon">
+                  <BarChart3 size={16} />
+                </span>
+                <span className="sidebar-label">{t("insights.title")}</span>
+              </button>
+              <button
+                className={`sidebar-item ${isViewActive("suspicious") ? "active" : ""}`}
+                onClick={() => handleNavigateAnalysis("suspicious")}
+                title={t("suspicious.title")}
+              >
+                <span className="sidebar-icon">
+                  <ShieldAlert size={16} />
+                </span>
+                <span className="sidebar-label">{t("suspicious.title")}</span>
+              </button>
+              <button
+                className={`sidebar-item ${isViewActive("categories") ? "active" : ""}`}
+                onClick={() => handleNavigateAnalysis("categories")}
+                title={t("categories.title")}
+              >
+                <span className="sidebar-icon">
+                  <PieChart size={16} />
+                </span>
+                <span className="sidebar-label">{t("categories.title")}</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         <button
           className="sidebar-item"
           onClick={onOpenSettings}

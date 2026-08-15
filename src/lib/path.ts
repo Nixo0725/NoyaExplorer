@@ -57,17 +57,28 @@ export function joinPath(dir: string, name: string): string {
 
 /** Returns the parent directory of a path, or null if at the root. */
 export function parentPath(path: string): string | null {
-  // Windows drive root: C:\
+  // Racines : lecteur Windows (C:\, C:/) ou racine Unix (/)
   if (/^[a-zA-Z]:[\\/]?$/.test(path)) return null;
+  if (path === "/" || path === "") return null;
 
-  // Normalize separators
-  const normalized = path.replace(/\//g, "\\").replace(/\\+$/, "");
-  const lastSep = normalized.lastIndexOf("\\");
-  if (lastSep <= 2) {
-    // e.g. C:\Users -> C:\
+  // Conserve le séparateur natif (Windows `\` ou Unix `/`)
+  const normalized = path.replace(/[\\/]+$/, "");
+  const lastSep = Math.max(
+    normalized.lastIndexOf("/"),
+    normalized.lastIndexOf("\\"),
+  );
+
+  if (lastSep <= 0) {
+    // e.g. /home -> / ; C:\Users -> C:\
     const driveMatch = normalized.match(/^([a-zA-Z]:)/);
     if (driveMatch) return `${driveMatch[1]}\\`;
-    return null;
+    return "/";
   }
+
+  // Racine de lecteur Windows sans dossier parent au-delà (C:\Users -> C:\)
+  if (lastSep === 2 && normalized[1] === ":") {
+    return normalized.slice(0, 3);
+  }
+
   return normalized.slice(0, lastSep);
 }

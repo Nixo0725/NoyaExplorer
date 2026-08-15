@@ -1,25 +1,18 @@
 import { useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import {
-  Folder,
-  ExternalLink,
-  Trash2,
-  Search,
-  HardDrive,
-  FolderOpen,
-} from "lucide-react";
+import { Folder, ExternalLink, Trash2, HardDrive, RefreshCw } from "lucide-react";
 import type { BiggestFile } from "../types";
 import { formatSize, formatDate } from "../lib/format";
 import { categoryLabel } from "../lib/category";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useAnalysis } from "../contexts/AnalysisContext";
 
 /* ---------- Types internes ---------- */
 
 type SortKey = "name" | "path" | "size" | "category" | "modified";
 type SortDir = "asc" | "desc";
 
-const LIMIT_OPTIONS = [10, 50, 100, 500] as const;
+const LIMIT_OPTIONS = [10, 50, 100] as const;
 
 /* ---------- Utilitaires ---------- */
 
@@ -36,63 +29,24 @@ function getParentPath(path: string): string {
 /**
  * Page "Plus gros fichiers".
  *
- * Autonome (aucune props) : gère son propre état :
- *  - Sélection du dossier source via la boîte de dialogue native
- *  - Choix du nombre de résultats (Top N)
- *  - Appel à `get_biggest_files` côté Rust
- *  - Tri par colonne
- *  - Actions par ligne (ouvrir, dossier contenant, supprimer)
+ * Utilise l'analyse globale mise en cache (`AnalysisContext`) : aucun choix
+ * de dossier n'est nécessaire. Le Top N est appliqué côté client sur les
+ * résultats du scan global.
  */
 function BiggestFilesView() {
   const { t } = useLanguage();
+  const { analysis, loading, refreshing, error, refresh, mutate } =
+    useAnalysis();
 
   /* ---------- État ---------- */
 
-  const [sourcePath, setSourcePath] = useState<string>("");
   const [limit, setLimit] = useState<number>(100);
-  const [files, setFiles] = useState<BiggestFile[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorLocal, setErrorLocal] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("size");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  /* ---------- Sélection du dossier source ---------- */
-
-  const handleSelectSource = async () => {
-    try {
-      const selected = await openDialog({
-        directory: true,
-        multiple: false,
-        title: t("biggest_files.select_source"),
-      });
-      if (selected) {
-        setSourcePath(selected);
-        setError(null);
-      }
-    } catch (err) {
-      setError(String(err));
-    }
-  };
-
-  /* ---------- Analyse ---------- */
-
-  const handleAnalyze = async () => {
-    if (!sourcePath) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await invoke<BiggestFile[]>("get_biggest_files", {
-        path: sourcePath,
-        limit,
-      });
-      setFiles(result);
-    } catch (err) {
-      setError(String(err));
-      setFiles([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const files: BiggestFile[] = analysis?.biggestFiles ?? [];
+  const displayError = error ?? errorLocal;
 
   /* ---------- Tri ---------- */
 
@@ -134,8 +88,8 @@ function BiggestFilesView() {
         cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
       }
       return cmp * dir;
-    });
-  }, [files, sortKey, sortDir, t]);
+    }).slice(0, limit);
+  }, [files, sortKey, sortDir, limit, t]);
 
   /* ---------- Actions par ligne ---------- */
 
@@ -143,7 +97,7 @@ function BiggestFilesView() {
     try {
       await invoke("open_file", { path: file.path });
     } catch (err) {
-      setError(String(err));
+      setErrorLocal(String(err));
     }
   };
 
@@ -152,7 +106,7 @@ function BiggestFilesView() {
       const parent = getParentPath(file.path);
       await invoke("open_file", { path: parent });
     } catch (err) {
-      setError(String(err));
+      setErrorLocal(String(err));
     }
   };
 
@@ -163,9 +117,14 @@ function BiggestFilesView() {
     if (!confirmed) return;
     try {
       await invoke("delete_entry", { path: file.path });
-      setFiles((prev) => prev.filter((f) => f.path !== file.path));
+      // Met à jour localement l'analyse globale sans relancer un scan complet
+      // (une resynchronisation périodique se chargera du cache à terme).
+      mutate((a) => ({
+        ...a,
+        biggestFiles: a.biggestFiles.filter((f) => f.path !== file.path),
+      }));
     } catch (err) {
-      setError(String(err));
+      setErrorLocal(String(err));
     }
   };
 
@@ -179,14 +138,14 @@ function BiggestFilesView() {
 
         {/* Barre d'outils */}
         <div className="toolbar">
-          <button
-            className="ghost-btn"
-            onClick={handleSelectSource}
-            title={t("biggest_files.select_source")}
-          >
-            <FolderOpen size={14} />
-            <span>{sourcePath || t("biggest_files.select_source")}</span>
-          </button>
+          {analysis && (
+            <span className="ghost-btn" style={{ cursor: "default" }}>
+              <HardDrive size={14} />
+              <span>
+                {t("analysis.root", { root: analysis.root })}
+              </span>
+            </span>
+          )}
 
           <span className="toolbar-sep" />
 
@@ -206,11 +165,11 @@ function BiggestFilesView() {
 
           <button
             className="toolbar-action"
-            onClick={handleAnalyze}
-            disabled={!sourcePath || loading}
+            onClick={() => void refresh()}
+            disabled={loading || refreshing}
           >
-            <Search size={14} />
-            {loading ? t("biggest_files.scanning") : t("biggest_files.scan")}
+            <RefreshCw size={14} />
+            {refreshing ? t("analysis.refreshing") : t("analysis.refresh")}
           </button>
 
           {files.length > 0 && !loading && (
@@ -223,16 +182,16 @@ function BiggestFilesView() {
         </div>
 
         {/* Erreur */}
-        {error && <div className="status error">{error}</div>}
+        {displayError && <div className="status error">{displayError}</div>}
 
         {/* Chargement */}
-        {loading && <div className="status">{t("app.loading")}</div>}
+        {loading && <div className="status">{t("analysis.scanning")}</div>}
 
         {/* État initial / vide */}
-        {!loading && !error && files.length === 0 && (
+        {!loading && !displayError && files.length === 0 && (
           <div className="status">
             <HardDrive size={32} />
-            <p>{t("biggest_files.empty")}</p>
+            <p>{t("analysis.empty")}</p>
           </div>
         )}
 

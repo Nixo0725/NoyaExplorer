@@ -333,7 +333,7 @@ export function DragDropProvider({ children, onDrop }: DragDropProviderProps) {
  * Hit-test géométrique : renvoie la cible de drop la plus proche du curseur
  * parmi toutes les cibles enregistrées via [data-drop-target] ou .droppable.
  * On sélectionne le rectangle contenant le curseur le plus petit (le plus
- * spécifique), ce qui privilégie un Space individuel plutôt que la section
+ * spécifique), ce qui privilégie une cible individuelle plutôt que la section
  * entière.
  */
 function hitTestDropTargets(x: number, y: number): Element | null {

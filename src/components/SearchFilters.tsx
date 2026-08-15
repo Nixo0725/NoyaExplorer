@@ -81,7 +81,8 @@ export default function SearchFilters({
     filters.createdAfter !== undefined ||
     filters.recentOnly === true ||
     filters.oldOnly === true ||
-    filters.largeOnly === true;
+    filters.largeOnly === true ||
+    filters.unusedOnly === true;
 
   /* ---------- Rendu ---------- */
 
@@ -286,6 +287,16 @@ export default function SearchFilters({
                   }
                 />
                 {t("filters.large_only")}
+              </label>
+              <label className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={boolVal(filters.unusedOnly)}
+                  onChange={(e) =>
+                    update({ unusedOnly: e.target.checked || undefined })
+                  }
+                />
+                {t("filters.unused_only")}
               </label>
             </div>
 

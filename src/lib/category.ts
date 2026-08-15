@@ -10,6 +10,7 @@ const LABELS: Record<FileCategory, string> = {
   archive: "cat.archive",
   code: "cat.code",
   executable: "cat.executable",
+  script: "cat.script",
   other: "cat.other",
 };
 

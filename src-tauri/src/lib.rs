@@ -30,19 +30,11 @@ pub fn run() {
             commands::search::search_files_advanced,
             // Storage analysis
             commands::storage::storage_stats,
-            commands::storage::get_biggest_files,
-            commands::storage::get_biggest_folders,
-            commands::storage::get_storage_insights,
-            // Spaces
-            commands::spaces::list_spaces,
-            commands::spaces::create_space,
-            commands::spaces::rename_space,
-            commands::spaces::delete_space,
-            commands::spaces::reorder_spaces,
-            commands::spaces::add_folder_to_space,
-            commands::spaces::remove_folder_from_space,
-            commands::spaces::update_space_icon,
-            commands::spaces::list_space_entries,
+            // Global analysis (cache)
+            commands::analyze::analyze_global,
+            commands::analyze::get_cached_analysis,
+            // Reports (export JSON / CSV)
+            commands::report::write_report,
             // Favorites & access history
             commands::favorites::list_favorites,
             commands::favorites::add_favorite,

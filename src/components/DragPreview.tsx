@@ -33,7 +33,7 @@ export default function DragPreview() {
   const info = getTypeInfo(firstName, isDir);
   const count = state.items.length;
 
-  // Nom de la cible de drop (dossier, favoris, espace…)
+  // Nom de la cible de drop (dossier, favoris…)
   const target = state.hoveredTarget;
   let targetName: string | null = null;
   if (target) {
@@ -43,8 +43,6 @@ export default function DragPreview() {
       targetName = folderPath.split(/[\\/]/).pop() || folderPath;
     } else if (targetType === "favorites") {
       targetName = t("sidebar.favorites");
-    } else if (targetType === "space") {
-      targetName = t("spaces.title");
     }
   }
 

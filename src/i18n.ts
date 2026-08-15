@@ -4,7 +4,6 @@ export type DictKey = keyof typeof FR;
 
 const FR: Record<string, string> = {
   /* ---------- App ---------- */
-  "app.name": "Noya Explorer",
   "app.open_folder": "Ouvrir un autre dossier",
   "app.open_folder_btn": "Ouvrir…",
   "app.back": "Précédent (Alt+←)",
@@ -58,6 +57,7 @@ const FR: Record<string, string> = {
   "sidebar.downloads": "Téléchargements",
   "sidebar.this_pc": "Ce PC",
   "sidebar.analyze": "Analyser le stockage",
+  "sidebar.analyze_current": "Analyser ce dossier",
   "sidebar.analyzing": "Analyse…",
   "sidebar.analyze_title": "Analyser le stockage du dossier courant",
   "sidebar.settings": "Paramètres",
@@ -65,7 +65,6 @@ const FR: Record<string, string> = {
   "sidebar.favorites": "Favoris",
   "sidebar.favorites_empty": "Glissez des fichiers ici pour les épingler",
   "sidebar.remove_favorite": "Retirer des favoris",
-  "sidebar.add_favorite": "Ajouter aux favoris",
 
   /* ---------- Settings ---------- */
   "settings.title": "Paramètres",
@@ -95,7 +94,6 @@ const FR: Record<string, string> = {
   /* ---------- Drag & drop ---------- */
   "drag.move_to": "Déplacer vers",
   "drag.copy_to": "Copier vers",
-  "drag.items": "éléments",
 
   /* ---------- Dialog ---------- */
   "dialog.cancel": "Annuler",
@@ -145,6 +143,7 @@ const FR: Record<string, string> = {
   "cat.archive": "Archive",
   "cat.code": "Code",
   "cat.executable": "Exécutable",
+  "cat.script": "Script",
   "cat.other": "Autre",
   "cat.file": "Fichier",
 
@@ -160,20 +159,6 @@ const FR: Record<string, string> = {
   "home.open_count": "{count} accès",
   "home.pin": "Épingler",
   "home.unpin": "Désépingler",
-  /* ---------- Spaces ---------- */
-  "spaces.title": "Espaces",
-  "spaces.empty": "Aucun espace pour le moment.",
-  "spaces.create": "Créer un espace",
-  "spaces.rename": "Renommer",
-  "spaces.delete": "Supprimer",
-  "spaces.name_placeholder": "Nom de l'espace",
-  "spaces.icon": "Icône",
-  "spaces.add_folder": "Ajouter un dossier",
-  "spaces.remove_folder": "Retirer le dossier",
-  "spaces.no_folders": "Aucun dossier ajouté.",
-  "spaces.source_folder": "Dossier source",
-  "spaces.drag_hint": "Glissez des dossiers ici pour les ajouter",
-
   /* ---------- Search filters ---------- */
   "filters.title": "Filtres",
   "filters.extension": "Extension",
@@ -188,13 +173,12 @@ const FR: Record<string, string> = {
   "filters.recent_only": "Fichiers récents (7 jours)",
   "filters.old_only": "Fichiers anciens (1 an)",
   "filters.large_only": "Gros fichiers (>100 Mo)",
+  "filters.unused_only": "Fichiers inutilisés (1 an sans accès)",
   "filters.clear": "Effacer les filtres",
 
   /* ---------- Biggest files ---------- */
   "biggest_files.title": "Plus gros fichiers",
   "biggest_files.limit": "Nombre max",
-  "biggest_files.scan": "Analyser",
-  "biggest_files.scanning": "Analyse en cours…",
   "biggest_files.name": "Nom",
   "biggest_files.path": "Chemin",
   "biggest_files.size": "Taille",
@@ -204,29 +188,19 @@ const FR: Record<string, string> = {
   "biggest_files.open_containing": "Ouvrir le dossier contenant",
   "biggest_files.delete": "Supprimer",
   "biggest_files.delete_confirm": 'Supprimer "{name}" ?',
-  "biggest_files.empty": "Aucun fichier trouvé. Cliquez sur Analyser pour lancer le scan.",
   "biggest_files.total_scanned": "{count} fichiers scannés",
-  "biggest_files.select_source": "Sélectionnez un dossier ou un disque",
 
   /* ---------- Biggest folders ---------- */
   "biggest_folders.title": "Plus gros dossiers",
   "biggest_folders.limit": "Nombre max",
-  "biggest_folders.scan": "Analyser",
-  "biggest_folders.scanning": "Analyse en cours…",
   "biggest_folders.name": "Nom",
   "biggest_folders.path": "Chemin",
   "biggest_folders.total_size": "Taille totale",
   "biggest_folders.file_count": "Fichiers",
   "biggest_folders.navigate": "Ouvrir le dossier",
-  "biggest_folders.empty": "Aucun dossier trouvé. Cliquez sur Analyser pour lancer le scan.",
-  "biggest_folders.select_source": "Sélectionnez un disque",
-  "biggest_folders.progress": "Analyse en cours… {count} dossiers trouvés",
 
   /* ---------- Storage insights ---------- */
   "insights.title": "Aperçu du stockage",
-  "insights.scan": "Analyser",
-  "insights.scanning": "Analyse en cours…",
-  "insights.select_source": "Sélectionnez un dossier ou un disque",
   "insights.total_scanned": "{count} fichiers analysés",
 
   "insights.largest_extensions": "Plus grandes extensions",
@@ -246,10 +220,56 @@ const FR: Record<string, string> = {
   "insights.unused_archive_desc": "Archive non modifiée depuis 180 jours",
 
   "insights.information_only": "Information uniquement. Aucune suppression automatique.",
+
+  "insights.select_all": "Tout sélectionner",
+  "insights.deselect_all": "Tout désélectionner",
+  "insights.delete_selected": "Supprimer la sélection ({count})",
+  "insights.delete_confirm_title": "Supprimer les fichiers ?",
+  "insights.delete_confirm":
+    "Supprimer {count} fichier(s) ({size}) ? Cette action est irréversible.",
+  "insights.delete_success": "{count} fichier(s) supprimé(s) avec succès.",
+  "insights.delete_error": "{count} fichier(s) n'ont pas pu être supprimés.",
+
+  /* ---------- Analyse globale (cache) ---------- */
+  "analysis.refresh": "Actualiser",
+  "analysis.refreshing": "Synchronisation…",
+  "analysis.scanning": "Analyse globale…",
+  "analysis.root": "Analyse globale : {root}",
+  "analysis.empty": "Lancez l'analyse globale pour afficher les résultats.",
+
+  /* ---------- Export de rapports ---------- */
+  "export.json": "Exporter JSON",
+  "export.csv": "Exporter CSV",
+  "export.success": "Rapport exporté avec succès.",
+  "export.error": "Échec de l'export :",
+
+  /* ---------- Fichiers suspects ---------- */
+  "suspicious.title": "Fichiers suspects",
+  "suspicious.empty":
+    "Aucun fichier suspect détecté. Cliquez sur Analyser pour lancer le scan.",
+  "suspicious.found": "{count} fichier(s) suspect(s) trouvé(s)",
+  "suspicious.name": "Nom",
+  "suspicious.path": "Chemin",
+  "suspicious.size": "Taille",
+  "suspicious.modified": "Modifié",
+  "suspicious.reasons": "Raisons",
+  "suspicious.reasons.double_extension": "Double extension",
+  "suspicious.reasons.unusual_location": "Emplacement inhabituel",
+  "suspicious.reasons.hidden_file": "Fichier caché",
+  "suspicious.reasons.recent_executable": "Exécutable récent",
+  "suspicious.reasons.obfuscated_name": "Nom obscurci",
+
+  /* ---------- Vue par catégorie ---------- */
+  "categories.title": "Vue par catégorie",
+  "categories.empty":
+    "Aucun fichier dans ce dossier. Cliquez sur Analyser pour lancer le scan.",
+  "categories.filtered_by": "Filtré par : {category}",
+  "categories.reset": "Réinitialiser",
+  "categories.size": "Taille",
+  "categories.files": "Fichiers",
 };
 
 const EN: Record<string, string> = {
-  "app.name": "Noya Explorer",
   "app.open_folder": "Open another folder",
   "app.open_folder_btn": "Open…",
   "app.back": "Back (Alt+←)",
@@ -300,6 +320,7 @@ const EN: Record<string, string> = {
   "sidebar.downloads": "Downloads",
   "sidebar.this_pc": "This PC",
   "sidebar.analyze": "Analyze storage",
+  "sidebar.analyze_current": "Analyze this folder",
   "sidebar.analyzing": "Analyzing…",
   "sidebar.analyze_title": "Analyze storage of the current folder",
   "sidebar.settings": "Settings",
@@ -307,7 +328,6 @@ const EN: Record<string, string> = {
   "sidebar.favorites": "Favorites",
   "sidebar.favorites_empty": "Drag files here to pin them",
   "sidebar.remove_favorite": "Remove from favorites",
-  "sidebar.add_favorite": "Add to favorites",
 
   "settings.title": "Settings",
   "settings.close": "Close",
@@ -335,7 +355,6 @@ const EN: Record<string, string> = {
   /* ---------- Drag & drop ---------- */
   "drag.move_to": "Move to",
   "drag.copy_to": "Copy to",
-  "drag.items": "items",
 
   "dialog.cancel": "Cancel",
   "dialog.new_folder_title": "New folder",
@@ -382,6 +401,7 @@ const EN: Record<string, string> = {
   "cat.archive": "Archive",
   "cat.code": "Code",
   "cat.executable": "Executable",
+  "cat.script": "Script",
   "cat.other": "Other",
   "cat.file": "File",
 
@@ -395,20 +415,6 @@ const EN: Record<string, string> = {
   "home.open_count": "{count} accesses",
   "home.pin": "Pin",
   "home.unpin": "Unpin",
-
-  /* ---------- Spaces ---------- */
-  "spaces.title": "Spaces",
-  "spaces.empty": "No spaces yet.",
-  "spaces.create": "Create space",
-  "spaces.rename": "Rename",
-  "spaces.delete": "Delete",
-  "spaces.name_placeholder": "Space name",
-  "spaces.icon": "Icon",
-  "spaces.add_folder": "Add folder",
-  "spaces.remove_folder": "Remove folder",
-  "spaces.no_folders": "No folders added.",
-  "spaces.source_folder": "Source folder",
-  "spaces.drag_hint": "Drag folders here to add them",
 
   /* ---------- Search filters ---------- */
   "filters.title": "Filters",
@@ -424,13 +430,12 @@ const EN: Record<string, string> = {
   "filters.recent_only": "Recent files (7 days)",
   "filters.old_only": "Old files (1 year)",
   "filters.large_only": "Large files (>100 MB)",
+  "filters.unused_only": "Unused files (1 year without access)",
   "filters.clear": "Clear filters",
 
   /* ---------- Biggest files ---------- */
   "biggest_files.title": "Biggest Files",
   "biggest_files.limit": "Max count",
-  "biggest_files.scan": "Scan",
-  "biggest_files.scanning": "Scanning…",
   "biggest_files.name": "Name",
   "biggest_files.path": "Path",
   "biggest_files.size": "Size",
@@ -440,29 +445,19 @@ const EN: Record<string, string> = {
   "biggest_files.open_containing": "Open containing folder",
   "biggest_files.delete": "Delete",
   "biggest_files.delete_confirm": 'Delete "{name}" ?',
-  "biggest_files.empty": "No files found. Click Scan to start.",
   "biggest_files.total_scanned": "{count} files scanned",
-  "biggest_files.select_source": "Select a folder or drive",
 
   /* ---------- Biggest folders ---------- */
   "biggest_folders.title": "Biggest Folders",
   "biggest_folders.limit": "Max count",
-  "biggest_folders.scan": "Scan",
-  "biggest_folders.scanning": "Scanning…",
   "biggest_folders.name": "Name",
   "biggest_folders.path": "Path",
   "biggest_folders.total_size": "Total size",
   "biggest_folders.file_count": "Files",
   "biggest_folders.navigate": "Open folder",
-  "biggest_folders.empty": "No folders found. Click Scan to start.",
-  "biggest_folders.select_source": "Select a drive",
-  "biggest_folders.progress": "Scanning… {count} folders found",
 
   /* ---------- Storage insights ---------- */
   "insights.title": "Storage Insights",
-  "insights.scan": "Scan",
-  "insights.scanning": "Scanning…",
-  "insights.select_source": "Select a folder or drive",
   "insights.total_scanned": "{count} files analyzed",
 
   "insights.largest_extensions": "Largest extensions",
@@ -482,6 +477,53 @@ const EN: Record<string, string> = {
   "insights.unused_archive_desc": "Archive not modified for 180 days",
 
   "insights.information_only": "Information only. No automatic deletion.",
+
+  "insights.select_all": "Select all",
+  "insights.deselect_all": "Deselect all",
+  "insights.delete_selected": "Delete selection ({count})",
+  "insights.delete_confirm_title": "Delete files?",
+  "insights.delete_confirm":
+    "Delete {count} file(s) ({size})? This action is irreversible.",
+  "insights.delete_success": "{count} file(s) deleted successfully.",
+  "insights.delete_error": "{count} file(s) could not be deleted.",
+
+  /* ---------- Global analysis (cache) ---------- */
+  "analysis.refresh": "Refresh",
+  "analysis.refreshing": "Syncing…",
+  "analysis.scanning": "Global scan…",
+  "analysis.root": "Global analysis: {root}",
+  "analysis.empty": "Run the global analysis to display results.",
+
+  /* ---------- Report export ---------- */
+  "export.json": "Export JSON",
+  "export.csv": "Export CSV",
+  "export.success": "Report exported successfully.",
+  "export.error": "Export failed:",
+
+  /* ---------- Suspicious files ---------- */
+  "suspicious.title": "Suspicious files",
+  "suspicious.empty":
+    "No suspicious files detected. Click Scan to start.",
+  "suspicious.found": "{count} suspicious file(s) found",
+  "suspicious.name": "Name",
+  "suspicious.path": "Path",
+  "suspicious.size": "Size",
+  "suspicious.modified": "Modified",
+  "suspicious.reasons": "Reasons",
+  "suspicious.reasons.double_extension": "Double extension",
+  "suspicious.reasons.unusual_location": "Unusual location",
+  "suspicious.reasons.hidden_file": "Hidden file",
+  "suspicious.reasons.recent_executable": "Recent executable",
+  "suspicious.reasons.obfuscated_name": "Obfuscated name",
+
+  /* ---------- Category view ---------- */
+  "categories.title": "Category view",
+  "categories.empty":
+    "No files in this folder. Click Scan to start.",
+  "categories.filtered_by": "Filtered by: {category}",
+  "categories.reset": "Reset",
+  "categories.size": "Size",
+  "categories.files": "Files",
 };
 
 const DICTIONARIES: Record<Language, Record<string, string>> = { fr: FR, en: EN } as const;

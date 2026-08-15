@@ -7,6 +7,7 @@ import {
   FileArchive,
   FileCode,
   Settings,
+  Terminal,
   File,
   type LucideIcon,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const CATEGORY_ICON: Record<FileCategory, LucideIcon> = {
   archive: FileArchive,
   code: FileCode,
   executable: Settings,
+  script: Terminal,
   other: File,
 };
 
@@ -39,6 +41,7 @@ const CATEGORY_COLOR_VAR: Record<FileCategory, string> = {
   archive: "var(--cat-archive)",
   code: "var(--cat-code)",
   executable: "var(--cat-executable)",
+  script: "var(--cat-script)",
   other: "var(--cat-other)",
 };
 

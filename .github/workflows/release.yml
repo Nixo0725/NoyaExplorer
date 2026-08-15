@@ -1,0 +1,102 @@
+# Build multiplateforme Noya Explorer
+#
+# Déclenchement :
+#   - Pousser un tag "v*" (ex. `git tag v0.2.0 && git push origin v0.2.0`)
+#   - Ou via l'onglet Actions → « Build Release » → Run workflow
+#
+# Produits générés :
+#   - Windows : setup.exe (installer NSIS) + .msi (WiX)
+#   - Linux    : .deb + .AppImage (+ .rpm si disponible)
+#   - macOS    : .dmg (Intel x86_64 + Apple Silicon aarch64)
+#
+# Les artefacts sont attachés automatiquement à une GitHub Release.
+
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows → setup.exe + .msi
+          - platform: windows-latest
+            args: ""
+          # Linux → .deb + .AppImage (+ .rpm)
+          - platform: ubuntu-22.04
+            args: ""
+          # macOS Intel
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+          # macOS Apple Silicon
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Dépendances système Linux (webkit2gtk 4.1 pour Tauri v2)
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      # Mise en cache des dépendances npm pour les prochains runs
+      - name: Frontend dependencies
+        run: npm ci
+
+      # Compilation + bundling + création de la GitHub Release
+      - name: Tauri build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "Noya Explorer v__VERSION__"
+          releaseBody: |
+            Noya Explorer — version ${{ github.ref_name }}.
+
+            ## Installateurs
+            - **Windows** : `setup.exe` (installer NSIS)
+            - **Linux** : `.deb` et `.AppImage`
+            - **macOS** : `.dmg` (Intel et Apple Silicon)
+
+            ## Notes
+            - Analyse globale du stockage avec cache
+            - Vue par catégorie, fichiers suspects, export JSON/CSV
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

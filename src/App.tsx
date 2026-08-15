@@ -33,7 +33,6 @@ import type {
   SearchResult,
   FavoriteItem,
   AccessRecord,
-  Space,
   AppView,
   SearchFilters as SearchFiltersType,
 } from "./types";
@@ -45,6 +44,7 @@ import Breadcrumb from "./components/Breadcrumb";
 import FileList from "./components/FileList";
 import HomeView from "./components/HomeView";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { AnalysisProvider } from "./contexts/AnalysisContext";
 import { DragDropProvider } from "./components/DragDropProvider";
 import DragPreview from "./components/DragPreview";
 import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
@@ -52,11 +52,11 @@ import SettingsPanel from "./components/SettingsPanel";
 import ContextMenu, { type ContextMenuItem } from "./components/ContextMenu";
 import Dialog from "./components/Dialog";
 import PropertiesPanel from "./components/PropertiesPanel";
-import SpacesView from "./components/SpacesView";
-import SpaceManager from "./components/SpaceManager";
 import BiggestFilesView from "./components/BiggestFilesView";
 import BiggestFoldersView from "./components/BiggestFoldersView";
 import InsightsView from "./components/InsightsView";
+import SuspiciousFilesView from "./components/SuspiciousFilesView";
+import CategoryView from "./components/CategoryView";
 import SearchFilters from "./components/SearchFilters";
 
 const LAST_PATH_KEY = "noya:lastPath";
@@ -155,12 +155,6 @@ function AppContent() {
   // Routing de vues
   const [currentView, setCurrentView] = useState<AppView>("home");
 
-  // Spaces
-  const [spaces, setSpaces] = useState<Space[]>([]);
-  const [currentSpaceId, setCurrentSpaceId] = useState<string | null>(null);
-  const [spaceManagerOpen, setSpaceManagerOpen] = useState(false);
-  const [editingSpace, setEditingSpace] = useState<Space | null>(null);
-
   // Sélection multiple
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const lastSelectedPath = useRef<string | null>(null);
@@ -181,14 +175,6 @@ function AppContent() {
   currentPathRef.current = currentPath;
   const currentViewRef = useRef<AppView>(currentView);
   currentViewRef.current = currentView;
-
-  /** Charge les spaces depuis le backend */
-  const loadSpaces = useCallback(async () => {
-    try {
-      const s = await invoke<Space[]>("list_spaces");
-      setSpaces(s);
-    } catch {}
-  }, []);
 
   useEffect(() => {
     (async () => {
@@ -219,8 +205,6 @@ function AppContent() {
         const rf = await invoke<AccessRecord[]>("get_recent_files", { limit: 20 });
         setRecentFiles(rf);
       } catch {}
-      // Spaces
-      await loadSpaces();
     })();
   }, []);
 
@@ -238,6 +222,7 @@ function AppContent() {
         // Use advanced search if filters are active, otherwise basic search
         const hasFilters =
           searchFilters.extensions ||
+          searchFilters.location ||
           searchFilters.category ||
           searchFilters.minSize !== undefined ||
           searchFilters.maxSize !== undefined ||
@@ -247,7 +232,8 @@ function AppContent() {
           searchFilters.createdAfter ||
           searchFilters.recentOnly ||
           searchFilters.oldOnly ||
-          searchFilters.largeOnly;
+          searchFilters.largeOnly ||
+          searchFilters.unusedOnly;
 
         if (hasFilters) {
           const results = await invoke<SearchResult[]>("search_files_advanced", {
@@ -388,7 +374,6 @@ function AppContent() {
   const navigateTo = useCallback(
     async (path: string) => {
       setCurrentView("files");
-      setCurrentSpaceId(null);
       if (currentPath) {
         setHistory((prev) => [...prev, currentPath]);
       }
@@ -404,19 +389,9 @@ function AppContent() {
   const navigateView = useCallback(
     (view: AppView) => {
       setCurrentView(view);
-      setCurrentSpaceId(null);
       setSearch("");
       setSearchResults([]);
       setStorageStats(null);
-    },
-    [],
-  );
-
-  /** Ouvre un space */
-  const openSpace = useCallback(
-    (id: string) => {
-      setCurrentView("space");
-      setCurrentSpaceId(id);
     },
     [],
   );
@@ -531,22 +506,6 @@ function AppContent() {
     [t],
   );
 
-  /** Drop d'un dossier vers un Space */
-  const handleDropToSpace = useCallback(
-    async (spaceId: string, folder: string) => {
-      try {
-        const updated = await invoke<Space[]>("add_folder_to_space", {
-          id: spaceId,
-          folder,
-        });
-        setSpaces(updated);
-      } catch (e) {
-        setError(`Impossible d'ajouter le dossier : ${e}`);
-      }
-    },
-    [],
-  );
-
   /**
    * Gestion interne du drop depuis le système custom DragDropProvider.
    * `copy` est vrai si l'utilisateur maintenait Ctrl/Cmd au moment du relâchement
@@ -561,11 +520,6 @@ function AppContent() {
           const isDir = !name.includes(".") || path.endsWith("/") || path.endsWith("\\");
           addFavorite({ path, name, isDir });
         });
-      } else if (targetType === "space") {
-        const spaceId = targetEl.getAttribute("data-space-id");
-        if (spaceId && items.length > 0) {
-          handleDropToSpace(spaceId, items[0]);
-        }
       } else if (targetType === "folder") {
         // Déplacer/copier des entrées dans un dossier cible.
         const folderPath = targetEl.getAttribute("data-folder-path");
@@ -596,7 +550,7 @@ function AppContent() {
         if (cur) void loadDirectory(cur);
       }
     },
-    [addFavorite, handleDropToSpace, loadDirectory, t],
+    [addFavorite, loadDirectory, t],
   );
 
   // Enregistre le handler dans la ref module-level pour DragDropProvider
@@ -1098,12 +1052,6 @@ function AppContent() {
     return new Set(clipboard.paths);
   }, [clipboard]);
 
-  // Determine the currently active space for the spaces view
-  const activeSpace = useMemo(
-    () => spaces.find((s) => s.id === currentSpaceId) ?? null,
-    [spaces, currentSpaceId],
-  );
-
   return (
     <main
       className="app"
@@ -1117,10 +1065,8 @@ function AppContent() {
         specialDirs={specialDirs}
         drives={drives}
         favorites={favorites}
-        spaces={spaces}
         currentPath={currentPath}
         currentView={currentView}
-        currentSpaceId={currentSpaceId}
         onNavigate={(p) => void navigateTo(p)}
         onOpenHome={() => {
           setCurrentView("home");
@@ -1134,23 +1080,6 @@ function AppContent() {
         canAnalyze={!!currentPath}
         onRemoveFavorite={(p) => void removeFavorite(p)}
         onNavigateView={(v) => navigateView(v)}
-        onOpenSpace={(id) => openSpace(id)}
-        onCreateSpace={() => {
-          setEditingSpace(null);
-          setSpaceManagerOpen(true);
-        }}
-        onDeleteSpace={async (id) => {
-          try {
-            const updated = await invoke<Space[]>("delete_space", { id });
-            setSpaces(updated);
-            if (currentSpaceId === id) {
-              setCurrentView("home");
-              setCurrentSpaceId(null);
-            }
-          } catch (e) {
-            setError(`Impossible de supprimer l'espace : ${e}`);
-          }
-        }}
       />
 
       <div className="main-area">
@@ -1450,17 +1379,6 @@ function AppContent() {
           </>
         )}
 
-        {/* ---------- Vue Space ---------- */}
-        {currentView === "space" && activeSpace && (
-          <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <SpacesView
-              spaceId={currentSpaceId!}
-              spaceName={activeSpace.name}
-              onNavigateToFolder={navigateTo}
-            />
-          </div>
-        )}
-
         {/* ---------- Vue Biggest Files ---------- */}
         {currentView === "biggest-files" && (
           <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -1479,6 +1397,20 @@ function AppContent() {
         {currentView === "insights" && (
           <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <InsightsView />
+          </div>
+        )}
+
+        {/* ---------- Vue Fichiers suspects ---------- */}
+        {currentView === "suspicious" && (
+          <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <SuspiciousFilesView />
+          </div>
+        )}
+
+        {/* ---------- Vue par catégorie ---------- */}
+        {currentView === "categories" && (
+          <div className="content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <CategoryView />
           </div>
         )}
 
@@ -1546,20 +1478,6 @@ function AppContent() {
           />
         )}
 
-        {/* ---------- Space Manager ---------- */}
-        {spaceManagerOpen && (
-          <SpaceManager
-            space={editingSpace}
-            onClose={() => {
-              setSpaceManagerOpen(false);
-              setEditingSpace(null);
-            }}
-            onChange={() => {
-              loadSpaces();
-            }}
-          />
-        )}
-
         {/* ---------- Overlay de drop externe ---------- */}
         {externalDragPaths &&
           externalDragPaths.length > 0 &&
@@ -1595,10 +1513,12 @@ export default function App() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <DragDropProvider onDrop={handleInternalDrop}>
-          <AppContent />
-          <DragPreview />
-        </DragDropProvider>
+        <AnalysisProvider>
+          <DragDropProvider onDrop={handleInternalDrop}>
+            <AppContent />
+            <DragPreview />
+          </DragDropProvider>
+        </AnalysisProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

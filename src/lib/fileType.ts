@@ -7,6 +7,7 @@ export type FileCategory =
   | "archive"
   | "code"
   | "executable"
+  | "script"
   | "other";
 
 interface TypeInfo {
@@ -62,8 +63,11 @@ const EXTENSION_MAP: Record<string, TypeInfo> = {
   // Executables
   exe: { category: "executable" },
   msi: { category: "executable" },
-  bat: { category: "executable" },
-  sh: { category: "executable" },
+  // Scripts (shell / PowerShell / batch)
+  sh: { category: "script" },
+  bat: { category: "script" },
+  ps1: { category: "script" },
+  cmd: { category: "script" },
 };
 
 const FOLDER_INFO: TypeInfo = { category: "folder" };

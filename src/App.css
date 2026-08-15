@@ -31,6 +31,7 @@
   --cat-archive: #f59e0b;
   --cat-code: #10b981;
   --cat-executable: #ef4444;
+  --cat-script: #a855f7;
   --cat-other: #71717a;
 }
 
@@ -77,6 +78,9 @@ body {
 
 .sidebar-scroll {
   flex: 1;
+  /* Crucial en flexbox : permet à la zone de scroller au lieu de
+     déborder visuellement vers le haut quand le contenu est trop long. */
+  min-height: 0;
   padding: 8px 6px;
   overflow-y: auto;
 }
@@ -85,6 +89,46 @@ body {
   padding: 6px;
   border-top: 1px solid var(--border-strong);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ---------- Menu dépliant « Analyser » (s'ouvre vers le haut) ---------- */
+
+.sidebar-analyze-menu {
+  position: relative;
+}
+
+.sidebar-analyze-menu .sidebar-item {
+  padding-right: 8px;
+}
+
+.sidebar-chevron {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.sidebar-analyze-popover {
+  position: absolute;
+  /* S'ouvre vers le haut : ancré au-dessus du bouton */
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .sidebar-section {
@@ -539,6 +583,14 @@ body {
   color: var(--text-muted);
 }
 
+.status.success {
+  color: var(--success);
+}
+
+.status.error {
+  color: var(--error);
+}
+
 .file-row {
   width: 100%;
   border: none;
@@ -595,52 +647,6 @@ body {
 .file-size,
 .file-date {
   text-align: right;
-}
-
-/* ---------- Spaces View ---------- */
-
-.space-title {
-  margin: 0 0 8px;
-  padding: 0 10px;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-/**
- * La vue espace ajoute une colonne "Dossier source" à la grille.
- * On surcharge la grille standard (6 colonnes → 7).
- */
-.space-file-list .list-header,
-.space-file-row {
-  grid-template-columns: 28px minmax(120px, 1fr) 80px 100px 100px minmax(100px, 1.2fr);
-}
-
-.file-source {
-  font-size: 11px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.source-folder-link {
-  border: none;
-  background: transparent;
-  color: var(--accent);
-  font-size: 11px;
-  cursor: pointer;
-  padding: 0;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-  display: block;
-}
-
-.source-folder-link:hover {
-  color: var(--accent-hover);
-  text-decoration: underline;
 }
 
 /* ---------- Storage panel ---------- */
@@ -1013,103 +1019,6 @@ body {
 
 .dialog-confirm:not(.danger):hover:not(:disabled) {
   background: var(--accent-soft);
-}
-
-/* ---------- Space Manager (dialog étendu) ---------- */
-
-.space-manager-modal {
-  max-width: 480px;
-}
-
-.space-manager-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.space-manager-header .dialog-title {
-  margin: 0;
-}
-
-.icon-palette {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.icon-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background var(--transition), border-color var(--transition), color var(--transition);
-}
-
-.icon-option:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.icon-option.selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.space-folders-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.space-folders-empty {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-muted);
-  padding: 8px 0;
-}
-
-.space-folders-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.space-folder-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: var(--radius);
-  background: var(--bg);
-  border: 1px solid var(--border);
-}
-
-.space-folder-path {
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-}
-
-.space-folder-icon {
-  flex-shrink: 0;
-  color: var(--cat-folder);
 }
 
 .dialog-error {
@@ -1539,19 +1448,6 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
-}
-
-.space-title {
-  margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.space-description {
-  margin: 0 0 20px;
-  font-size: 13px;
-  color: var(--text-muted);
-  line-height: 1.5;
 }
 
 /* ---------- Cleanup tabs ---------- */
@@ -2150,6 +2046,14 @@ body {
 
 /* ---- Groupes de fichiers anciens ---- */
 
+.old-file-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0 10px;
+  flex-wrap: wrap;
+}
+
 .old-file-group {
   margin-bottom: 16px;
 }
@@ -2191,7 +2095,7 @@ body {
 
 .old-file-item {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(200px, 2fr) 80px 120px;
+  grid-template-columns: 24px minmax(140px, 1fr) minmax(200px, 2fr) 80px 120px;
   gap: 12px;
   padding: 6px 10px;
   align-items: center;
@@ -2207,6 +2111,17 @@ body {
 
 .old-file-item:hover {
   background: var(--bg-tertiary);
+}
+
+.old-file-item.selected {
+  background: var(--bg-selected);
+  border-left-color: var(--accent);
+}
+
+.old-file-check {
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
 }
 
 .old-file-name {
@@ -2335,16 +2250,6 @@ body.dnd-active .drag-preview {
   opacity: 0.9;
 }
 
-/* ---------- Sidebar space drag-over ---------- */
-
-.sidebar-space.drag-over,
-.sidebar-space.drag-over:hover {
-  background: var(--accent-soft);
-  border-left-color: var(--accent);
-  outline: 1px dashed var(--accent);
-  outline-offset: -1px;
-}
-
 /* ---------- Overlay de drop externe (fichiers OS → app) ---------- */
 
 .external-drop-overlay {
@@ -2394,4 +2299,97 @@ body.dnd-active .drag-preview {
   max-width: 320px;
   text-align: center;
   line-height: 1.4;
+}
+
+/* ---------- Fichiers suspects ---------- */
+
+.suspicious-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(200px, 2fr) 100px 110px minmax(160px, 1.5fr);
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  cursor: default;
+}
+
+.suspicious-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.suspicious-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.suspicious-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--warning-bg, var(--bg-tertiary));
+  color: var(--warning, var(--text-secondary));
+  border: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+/* ---------- Vue par catégorie ---------- */
+
+.category-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.category-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 90px 90px 1fr 60px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.category-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.category-row.active {
+  background: var(--bg-selected);
+  border-left-color: var(--accent);
+  border-color: var(--border-strong);
+}
+
+.category-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-size {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.category-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.category-percent {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }

@@ -13,6 +13,7 @@
         { "path": "**" }
       ]
     },
-    "dialog:default"
+    "dialog:default",
+    "dialog:allow-save"
   ]
 }

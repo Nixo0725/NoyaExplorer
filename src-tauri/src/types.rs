@@ -83,11 +83,12 @@ pub struct SearchFilters {
     pub recent_only: Option<bool>,
     pub old_only: Option<bool>,
     pub large_only: Option<bool>,
+    pub unused_only: Option<bool>,
 }
 
 /* ---------- Storage ---------- */
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CategoryStat {
     pub category: String,
@@ -95,7 +96,7 @@ pub struct CategoryStat {
     pub count: u64,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageStats {
     pub total_size: u64,
@@ -103,7 +104,7 @@ pub struct StorageStats {
     pub by_category: Vec<CategoryStat>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BiggestFile {
     pub name: String,
@@ -113,7 +114,7 @@ pub struct BiggestFile {
     pub modified: i64,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BiggestFolder {
     pub name: String,
@@ -122,7 +123,7 @@ pub struct BiggestFolder {
     pub file_count: u64,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtensionStat {
     pub extension: String,
@@ -131,7 +132,7 @@ pub struct ExtensionStat {
     pub percentage: f64,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OldFileInfo {
     pub path: String,
@@ -141,7 +142,7 @@ pub struct OldFileInfo {
     pub category: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageInsights {
     pub largest_extensions: Vec<ExtensionStat>,
@@ -149,17 +150,33 @@ pub struct StorageInsights {
     pub total_scanned: u64,
 }
 
-/* ---------- Spaces ---------- */
+/* ---------- Suspicious files ---------- */
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Space {
-    pub id: String,
+pub struct SuspiciousFile {
+    pub path: String,
     pub name: String,
-    pub icon: String,
-    pub folders: Vec<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub size: u64,
+    pub modified: i64,
+    pub reasons: Vec<String>,
+}
+
+/* ---------- Global analysis (cache) ---------- */
+
+/// Résultat agrégé de l'analyse globale du stockage, persisté en cache.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalAnalysis {
+    /// Racine scannée (dossier personnel par défaut).
+    pub root: String,
+    /// Horodatage (ms) du dernier scan complet.
+    pub scanned_at: i64,
+    pub stats: StorageStats,
+    pub insights: StorageInsights,
+    pub biggest_files: Vec<BiggestFile>,
+    pub biggest_folders: Vec<BiggestFolder>,
+    pub suspicious: Vec<SuspiciousFile>,
 }
 
 /* ---------- Favorites & access history ---------- */
@@ -235,7 +252,8 @@ pub fn categorize(name: &str) -> &'static str {
         "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "txt" | "md" => "document",
         "zip" | "rar" | "7z" | "tar" | "gz" => "archive",
         "js" | "ts" | "tsx" | "jsx" | "rs" | "py" | "json" | "html" | "css" => "code",
-        "exe" | "msi" | "bat" | "sh" => "executable",
+        "exe" | "msi" => "executable",
+        "sh" | "bat" | "ps1" | "cmd" => "script",
         _ => "other",
     }
 }

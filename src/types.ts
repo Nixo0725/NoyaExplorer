@@ -126,6 +126,7 @@ export interface SearchFilters {
   recentOnly?: boolean;
   oldOnly?: boolean;
   largeOnly?: boolean;
+  unusedOnly?: boolean;
 }
 
 /* ---------- Favorites & access history ---------- */
@@ -144,17 +145,6 @@ export interface AccessRecord {
   accessCount: number;
   lastAccessed: number;
   modified: number;
-}
-
-/* ---------- Spaces ---------- */
-
-export interface Space {
-  id: string;
-  name: string;
-  icon: string;
-  folders: string[];
-  createdAt: number;
-  updatedAt: number;
 }
 
 /* ---------- Biggest files ---------- */
@@ -199,13 +189,38 @@ export interface StorageInsights {
   totalScanned: number;
 }
 
+/* ---------- Suspicious files ---------- */
+
+export interface SuspiciousFile {
+  path: string;
+  name: string;
+  size: number;
+  modified: number;
+  reasons: string[];
+}
+
+/* ---------- Global analysis (cache) ---------- */
+
+export interface GlobalAnalysis {
+  /** Racine scannée (dossier personnel par défaut). */
+  root: string;
+  /** Horodatage (ms) du dernier scan complet. */
+  scannedAt: number;
+  stats: StorageStats;
+  insights: StorageInsights;
+  biggestFiles: BiggestFile[];
+  biggestFolders: BiggestFolder[];
+  suspicious: SuspiciousFile[];
+}
+
 /* ---------- View routing ---------- */
 
 /** The different views/screens in the application. */
 export type AppView =
   | "home"
   | "files"
-  | "space"
   | "biggest-files"
   | "biggest-folders"
-  | "insights";
+  | "insights"
+  | "suspicious"
+  | "categories";
