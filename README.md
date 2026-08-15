@@ -153,7 +153,7 @@ Analysis data is cached locally on your computer.
 
 ## 📖 Project
 
-Noya Explorer is open source and developed publicly on GitHub.
+Noya Explorer is under a permissive license and developed publicly on GitHub.
 
 Repository: [github.com/Nixo0725/NoyaExplorer](https://github.com/Nixo0725/NoyaExplorer)
 
